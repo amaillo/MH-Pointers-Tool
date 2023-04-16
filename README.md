@@ -87,7 +87,7 @@ You can export to a .csv all the strings (and pointers) with it addresses.
 
 ## Installation (Windows and Linux)
 
-Download the latest package. For Windows you will also need visual c++ runtime 2015-2022.
+Download the latest package. For Windows you will also need visual c++ runtime 2015-2022 and for Linux you will need Nodegui installed.
 
 ## Building from source
 
