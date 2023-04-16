@@ -65,19 +65,7 @@ Do you already has a spreadsheet with the original text and also the translated 
 
 Examples:
 
-Welcome to the	    ハンターズギルドへ   
-Hunter's Guild! 	ようこそ！
-Pick the level of 	受注されるクエストの
-quest you'd like to レベルを選んで下さい。
-undertake.	
-
-Improved Rathalos Cap. The	レウスキャップの強化型頭用
-
-heat-resistant material is	装備。素材がみな高温に強く、
-
-extremely hard to work.	    加工作業は困難を極める。
-
-In this example there are 4 different strings.
+<img alt="example1" src="./pngs/example1.png" height="280" />
 
 -   **Exportable data**
 
