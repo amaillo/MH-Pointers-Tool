@@ -1,0 +1,18 @@
+# Ignore deploy folder
+deploy
+
+# Ignore dist folder
+dist
+
+# Ignore modules
+node_modules
+
+# Ignore config
+settings.cfg
+
+# Ignore vsc files
+src/.vscode
+.vscode
+
+# Ignore vsc files
+Pointers Tables
