@@ -87,32 +87,31 @@ Download the latest package. For Windows you will also need visual c++ runtime 2
 
 2) Open gitbash and type:
 
-´´´´
-git clone https://github.com/mh-pointers-tool/mh-pointers-tool.git
-cd mh-pointers-tool
+```
+git clone https://github.com/amaillo/MH-Pointers-Tool.git
+cd MH-Pointers-Tool
 npm install
 npm start
-npx nodegui-packer --init mh-pointers-tool
+npx nodegui-packer --init MH-Pointers-Tool
 npx nodegui-packer --pack dist
-´´´´
+```
 
 ### Linux (tested on Linux mint)
 
-´´´´
+```
 sudo apt install -y git
 sudo apt-get install -y nodejs
 sudo apt install -y cmake
-sudo git clone https://github.com/mh-pointers-tool/mh-pointers-tool.git
-sudo cd usr/lib/node_modules/mh-pointers-helper
+sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
+sudo cd usr/lib/node_modules/MH-Pointers-Tool
 sudo npm install
 sudo npm start
-
-sudo npx nodegui-packer --init mh-pointers-tool
+sudo npx nodegui-packer --init MH-Pointers-Tool
 sudo npx nodegui-packer --pack dist
-´´´´
+```
 
 If the AppRun file doesn't work, do this:
-Check mh-pointers-tool/deploy/linux/build/mh-pointers-tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins
+Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins.
 
 ## Special Thanks
 
