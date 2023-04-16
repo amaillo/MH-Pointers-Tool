@@ -65,11 +65,11 @@ Do you already has a spreadsheet with the original text and also the translated 
 
 Examples:
 
-Welcome to the	    ハンターズギルドへ   
-Hunter's Guild! 	ようこそ！
-Pick the level of 	受注されるクエストの
-quest you'd like to レベルを選んで下さい。
-undertake.	
+Welcome to the      ハンターズギルドへ 
+Hunter's Guild!     ようこそ！ 
+Pick the level of   受注されるクエストの 
+quest you'd like to レベルを選んで下さい。 
+undertake.	 
 
 Improved Rathalos Cap. The	レウスキャップの強化型頭用
 
