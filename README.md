@@ -67,6 +67,8 @@ Examples:
 
 <img alt="example1" src="./pngs/example1.png" height="280" />
 
+There are 4 different strings in this example.
+
 -   **Exportable data**
 
 You can export to a .csv all the strings (and pointers) with it addresses.
