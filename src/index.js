@@ -3615,7 +3615,7 @@ exportAllButton.setEnabled(false)
 
 //RWA: MHG Wii Pointer Button--------------------------------------------
 const bigEndian = new QCheckBox()
-bigEndian.setText("Big Endian (for MHG/Tri on Wii)")
+bigEndian.setText("Big Endian (MHTri/G on Wii)")
 bigEndian.setToolTip("Changes the pointers used to Big Endian")
 
 
