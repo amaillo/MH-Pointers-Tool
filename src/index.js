@@ -399,9 +399,7 @@ function saveAndPrepare2(){
 
   if(firstStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && lastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && fs.existsSync(`${selectedFile}`) === true
-    &&firstPointerAddressLineEdit.text()!=""
-    &&lastPointerAddressLineEdit.text()!=""  ){
+    && fs.existsSync(`${selectedFile}`) === true){
       console.log("Both string address are in a correct hex format!")
     }
 
