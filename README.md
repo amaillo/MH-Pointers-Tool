@@ -1,6 +1,14 @@
 # MH Pointers Tool
 
-This tool can translate Shift-JIS text to UTF8 (and viceversa) in a file. It was used to translate MHG for the PS2 from Japanese to English, so any game that has files with a similar strings and pointers structure must be also editable with it. It has been tested with MHP, MHG Wii, MHTri Europe version (The Japanese one has a weird encription, so i was not able to tested with it) and MHP3rd HD with excellents results. If you make some sucessfully tests with any other game, please let me know to add it to this list ^-^O.
+This tool can manage files with Shift-JIS and UTF8 encodings, then organize the file strings in a simple GUI where they can be edited. The edit can takes in count the pointers of these (if it position is given by the user), so if a string is edited the pointers will change too, maintaining the logic of where is the string in the file and making possible to get more free space to translate.
+
+It also has a lot of other functions, check below to know more!
+
+This tool was used to translate MHG for the PS2 from Japanese to English, so any game that has files with a similar strings and pointers structure must be also editable with it. 
+
+It has been also tested with MHP, MHG Wii and MHTri Europe version (The Japanese one has a weird encription, so I was not able to tested with it) and MHP3rd HD with excellents results. 
+
+If you make some sucessfully tests with any other game, please let me know to add it to this list ^-^O.
 
 ## Compatible estructure
 

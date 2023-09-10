@@ -21,12 +21,15 @@ const {
   QApplication,
   QClipboardMode,
   QDialog,
-  QIcon
+  QIcon,
+  QButtonGroup,
+  QRadioButton
+
 } = require("@nodegui/nodegui");
 
 const fs = require('fs')
 const path = require('path')
-const Encoding = require('encoding-japanese');
+const EncodingModule = require('encoding-japanese');
 
 let stringsArr = []
 let textToSearchOld = ""
@@ -71,10 +74,22 @@ let tableEndStringFileAddresses = []
 let sectionedCurrentContent = []
 let selectedPTFile = ""
 let pointersTableMode = false
+let csvTranslationMode = false
+let exportAllMode = false
+let exportAllModeVariable = 0
 let pointersTableModeSettingsArr = []
 let currentTableContent = []
 let organizedSections = []
 let oldSelectedTablePointers = []
+let stringsOffset = 0
+let stringsOldOffset = 0
+let shiftJISEncoding = false
+let UTF8Encoding = true
+let originalLenght = 0
+let globalOffset = 0
+let stopExport = false
+let skipExport = false
+let postLastStringAddress
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -144,20 +159,27 @@ function setNextItem(){
 //Open a file dialog to choose a file and save it path in selectedFile.
 function loadFile() {
 
+  let goBack = true
+    
+  fileDialog.addEventListener("fileSelected",function(){
+
+      if(fileDialog.selectedFiles().length!=0&&
+        fs.lstatSync(fileDialog.selectedFiles()[0]).isDirectory()===false){
+
+          selectedFile = fileDialog.selectedFiles();
+          start()
+        goBack = false
+      }else{
+        selectedFile = filePathQLineEditRead.text()
+        start()
+        return
+      }
+    })
+
   fileDialog.exec();
 
-  if(fileDialog.selectedFiles().length!=0&&
-    fs.lstatSync(fileDialog.selectedFiles()[0]).isDirectory()===false){
-
-    selectedFile = fileDialog.selectedFiles();
-    start()
-
-  }else{
-
-    selectedFile = filePathQLineEditRead.text()
-    start()
-    return
-
+  if(goBack===true){
+    return 1
   }
 };
 
@@ -171,7 +193,11 @@ function start(){
 
     currentContent = fs.readFileSync(`${selectedFile}`);
     filePathQLineEditRead.setText(`${selectedFile}`)
-    action5.setEnabled(true)
+    mainMenuAction3.setEnabled(true)
+  }
+
+  if(pointersTableMode===true){
+    mainMenuAction3.setEnabled(false)
   }
 }
 
@@ -191,15 +217,16 @@ function saveAndPrepare(tableMode){
 
     console.log("Both strings and pointers address are in a correct hex format!")
 
-  }
-
-  else{
-
-    errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+  }else{
+    if(exportAllMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipExport=true
+    }
     return
-
   }
 
   let pointer1Address = firstPointerAddressLineEdit.text()
@@ -210,21 +237,21 @@ function saveAndPrepare(tableMode){
 
   if(pointer1AddressDecimal>currentContent.length ||
     pointer2AddressDecimal>currentContent.length){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("At least one pointer address is too big for this file x_x")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
 
   }else if(pointer2AddressDecimal<pointer1AddressDecimal){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Invalid pointers scheme, the first pointer address\nis greater than the first one")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
 
   }else if(pointer2AddressDecimal===pointer1AddressDecimal){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Invalid pointer addresses, same addresses")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -241,20 +268,21 @@ function saveAndPrepare(tableMode){
   if(string1AddressDecimal>currentContent.length ||
     string2AddressDecimal>currentContent.length){
 
-    errorMessageBox.setText("At least one string address is too big for this file x_x")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("At least one string address is too big for this file x_x")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return
 
-    return
   }else if(string2AddressDecimal<string1AddressDecimal){
-
-    errorMessageBox.setText("Invalid string scheme, the first string address is greater than the first one")
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
 
     return
   }else if(string2AddressDecimal===string1AddressDecimal){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Invalid string addresses, same addresses")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -291,7 +319,6 @@ function saveAndPrepare(tableMode){
   hiddenPointers=0
   let k =0
   while(Number(extractedPointers.length)>1){
-
     extractedPointersIn4[i] = extractedPointers.slice(0,4)
 
     if(extractedPointers.slice(0,4).toString("hex") != "00000000"){
@@ -316,70 +343,127 @@ function saveAndPrepare(tableMode){
 
   pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${sharedPointers})`)
 
-
   extractedStrings = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
   let extractedStringsTemp = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
 
-  // console.log(Number(extractedStringsTemp.length))
 
   i=0;
+
+
   rawStrings = [] //in hex, contains all 00
   textStrings = [] //in Unicode, without all the 00
   let phase =0;
   let tempString = []
   k = 0
 
-  loop1:
-  while(Number(extractedStringsTemp.length)>1){
-    k =0;
-    phase = 0;
-
-    loop2:
-    while(phase<3){
-
-      if(extractedStringsTemp[k] === 00){
-      phase = 1
-      // console.log("00 found!")
-      
-      }else if (phase === 1 && extractedStringsTemp[k] !=00){
-
-        // console.log("00 and then a anything else found")
-
-        tempString = extractedStringsTemp.slice(0,k)
-        extractedStringsTemp = extractedStringsTemp.slice(k)
-
-      break loop2
+  if(pointersTableMode===false){
+    loop1:
+    while(Number(extractedStringsTemp.length)!=0){
+      k =0;
+      phase = 0;
+  
+      loop2:
+      while(phase<3){
+  
+        if(extractedStringsTemp[k] === 0){
+        phase = 1
+        
+        }else if (phase === 1 && extractedStringsTemp[k] !=0){
+  
+          tempString = extractedStringsTemp.slice(0,k)
+          extractedStringsTemp = extractedStringsTemp.slice(k)
+  
+        break loop2
+        }
+        k=k+1;
+        if(extractedStringsTemp[k] === undefined){
+          
+          rawStrings[i] = extractedStringsTemp 
+          break loop1
+        }
       }
-      k=k+1;
-      if(extractedStringsTemp[k] === undefined){
-        rawStrings[i] = extractedStringsTemp 
-        break loop1
+  
+      rawStrings[i] = tempString
+      i = i+1;
+    }
+  }else if(pointersTableMode===true){
+
+    k =0;
+    while (Number(extractedStringsTemp.length)!=0){
+      if(extractedStringsTemp[k] === 0){
+        rawStrings[i] = extractedStringsTemp.slice(0,k+1)
+        extractedStringsTemp = extractedStringsTemp.slice(k+1)
+
+        k =0
+        i=i+1
+      }if(extractedStringsTemp[k]!=0){
+        break
       }
     }
+    
+    loop1:
+    while(Number(extractedStringsTemp.length)!=0){
+      k =0;
+      phase = 0;
+  
+      loop2:
+      while(phase<3){
 
-    rawStrings[i] = tempString
-    i = i+1;
+        if(extractedStringsTemp[k] === 0){
+        phase = 1
+
+        
+        }else if (phase === 1 && extractedStringsTemp[k] !=0){
+  
+  
+          tempString = extractedStringsTemp.slice(0,k)
+          extractedStringsTemp = extractedStringsTemp.slice(k)
+      
+        break loop2
+        }
+        k=k+1;
+        if(extractedStringsTemp[k] === undefined){
+
+          rawStrings[i] = extractedStringsTemp 
+
+          break loop1
+        }
+      }
+
+      rawStrings[i] = tempString
+      i = i+1;
+    }
   }
 
   i=0;
 
   while(rawStrings[i] != undefined){
 
-    const conversion = Encoding.convert(rawStrings[i], {
-    to: 'UNICODE',
-    from: 'SJIS',
-    });
+    if(shiftJISEncoding===true){
+      const conversion = EncodingModule.convert(rawStrings[i], {
+        to: 'UNICODE',
+        from: 'SJIS',
+        });
+    
+        const convertedString = EncodingModule.codeToString(conversion)
+        const extractedItem2 = new QListWidgetItem()
+        extractedItem2.setText(`${convertedString}`)
+        listWidget.addItem(extractedItem2)
+    
+        i = i+1;
+    }else if(UTF8Encoding===true){
+ 
+        const extractedItem2 = new QListWidgetItem()
+        extractedItem2.setText(`${rawStrings[i]}`)
+        listWidget.addItem(extractedItem2)
 
-    const convertedString = Encoding.codeToString(conversion)
-    const extractedItem2 = new QListWidgetItem()
-    extractedItem2.setText(`${convertedString}`)
-    listWidget.addItem(extractedItem2)
-
-    i = i+1;
+        i = i+1;
+    }
 
   }
 
   extractedStringsOLD = Buffer.concat(rawStrings)
+  originalLenght= extractedStringsOLD.length
 
   stringAddressFunc(currentContent)
   spaceLeftFunc(extractedStrings)
@@ -405,11 +489,15 @@ function saveAndPrepare2(){
 
   else{
 
-    errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+    if(exportAllMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipExport=true
+    }
     return
-
   }
 
 
@@ -423,21 +511,26 @@ function saveAndPrepare2(){
 
   if(string1AddressDecimal>currentContent.length ||
   string2AddressDecimal>currentContent.length){
-
-    errorMessageBox.setText("At least one string address is too big for this file x_x")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
+   
+    if(exportAllMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("At least one string address is too big for this file x_x")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return
+    }else{
+      skipExport=true
+    }
 
   }else if(string2AddressDecimal<string1AddressDecimal){
-
-    errorMessageBox.setText("Invalid string scheme, the first string address is greater than the first one")
+    errorMessageBox.setWindowTitle("Error")
+  errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
 
   }else if(string2AddressDecimal===string1AddressDecimal){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Invalid string addresses, same addresses")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -449,11 +542,8 @@ function saveAndPrepare2(){
   csvButton.setEnabled(true)
   csvButton2.setEnabled(true)
   exportAllButton.setEnabled(true)
-
   extractedStrings = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
   let extractedStringsTemp = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
-
-  // console.log(Number(extractedStringsTemp.length))
 
   i=0;
   rawStrings = [] //in hex, contains all 00
@@ -472,13 +562,10 @@ function saveAndPrepare2(){
     loop2:
     while(phase<3){
 
-      if(extractedStringsTemp[k] === 00){
+      if(extractedStringsTemp[k] === 0){
       phase = 1
-      // console.log("00 found!")
-      
-      }else if (phase === 1 && extractedStringsTemp[k] !=00){
 
-        // console.log("00 and then a anything else found")
+      }else if (phase === 1 && extractedStringsTemp[k] !=0){
 
         tempString = extractedStringsTemp.slice(0,k)
         extractedStringsTemp = extractedStringsTemp.slice(k)
@@ -504,18 +591,26 @@ function saveAndPrepare2(){
   }
   while(rawStrings[i] != undefined){
 
-    const conversion = Encoding.convert(rawStrings[i], {
-    to: 'UNICODE',
-    from: 'SJIS',
-    });
-
-    const convertedString = Encoding.codeToString(conversion)
-
-    const extractedItem2 = new QListWidgetItem()
-    extractedItem2.setText(`${convertedString}`)
-    listWidget.addItem(extractedItem2)
-
-    i = i+1;
+    if(shiftJISEncoding===true){
+      const conversion = EncodingModule.convert(rawStrings[i], {
+        to: 'UNICODE',
+        from: 'SJIS',
+        });
+    
+        const convertedString = EncodingModule.codeToString(conversion)
+        const extractedItem2 = new QListWidgetItem()
+        extractedItem2.setText(`${convertedString}`)
+        listWidget.addItem(extractedItem2)
+    
+        i = i+1;
+    }else if(UTF8Encoding===true){
+  
+        const extractedItem2 = new QListWidgetItem()
+        extractedItem2.setText(`${rawStrings[i]}`)
+        listWidget.addItem(extractedItem2)
+    
+        i = i+1;
+    }
 
   }
 
@@ -527,8 +622,8 @@ function saveAndPrepare2(){
     pointersViewerButtonToHide00.setEnabled(false)
   }
 
-
   extractedStringsOLD = Buffer.concat(rawStrings)
+  originalLenght= extractedStringsOLD.length
   stringAddressFuncWithoutPointers(currentContent)
   spaceLeftFunc(extractedStrings)
   saveConfiguration()
@@ -542,31 +637,47 @@ function stringAddressFunc(data){
   let i = string1AddressDecimal;
   let phase = 0;
   let k = 0;
-
+  let firstLetterFound= false
   //Analyze all the string indexes from currentContent
   //Saves the address/string index of each string start
-  while(i != string2AddressDecimal){
 
-    if(data[i] != 00 && phase === 0){
-      // console.log("phase 1 initiated")
+  if(data[i]!=0){
+    phase = 1;
+    firstLetterFound= true
+  }
+
+  while(i != string2AddressDecimal){
+    
+    if(data[i] != 0 && phase === 1){
+
       addressOfEachString[k] = i.toString(16).toUpperCase();
       k=k+1;
-      phase= 1;
+      phase= 2;
       
-    }else if(data[i] === 00 && phase===1){
-      // console.log("phase 2 initiated, returning to original phase")
-      phase = 0
+    }else if(data[i] === 0 && phase===2){
+
+      phase = 1
+    }else if(data[i]===0&& phase === 0 &&pointersTableMode===true){
+
+      addressOfEachString[k] = i.toString(16).toUpperCase();
+      k=k+1;
+      
+      if(data[i+1]!=0&&firstLetterFound===false ){
+
+      phase = 1
+      firstLetterFound=true
+      }
     }
 
     i=i+1;
   }
-
 
   //[First String Address in decimals]-[X String Address in decimals ]=
   //Difference
   //Difference+ [First string address in memory] = X String address in memory!
 
   //Format:String.
+
   let firstPointerW = pointersViewerlistWidget.item(0).text()
 
   if(bigEndian.isChecked()===true){
@@ -599,6 +710,7 @@ function stringAddressFunc(data){
   }
 
   while(addressOfEachString[i] != undefined){
+  
 
     let differenceInDecimals = parseInt(addressOfEachString[i],16)-parseInt(addressOfEachString[0],16)
     let nextPointerInDecimals = firstPointerValuesInDecimals+differenceInDecimals;
@@ -648,7 +760,6 @@ function stringAddressFunc(data){
     }
     i=i+1
   }
-
 }
 
 //Similar to stringAddressFunc()
@@ -662,14 +773,14 @@ function stringAddressFuncWithoutPointers(data){
   //Saves the address/string index of each string start
   while(i != string2AddressDecimal){
 
-    if(data[i] != 00 && phase === 0){
-      // console.log("phase 1 initiated")
+    if(data[i] != 0 && phase === 0){
+
       addressOfEachString[k] = i.toString(16).toUpperCase();
       k=k+1;
       phase= 1;
       
-    }else if(data[i] === 00 && phase===1){
-      // console.log("phase 2 initiated, returning to original phase")
+    }else if(data[i] === 0 && phase===1){
+
       phase = 0
     }
 
@@ -684,7 +795,7 @@ function spaceLeftFunc(data){
   let i = 0;
   while(data[i] != undefined){
 
-    if(data[i] === 00){
+    if(data[i] === 0){
       numSpaceLeft= numSpaceLeft+1
     }
     i=i+1
@@ -734,11 +845,12 @@ let phase=0;
         }
         s= s+1;
       }
+
       phase=0
     }
     i=i+1;
   }
-  
+
   i =0
   //Removing [POT4T0]
   while(extractedPointersIn4[i]!=undefined){
@@ -763,7 +875,6 @@ function pointerAdjuster(data){
 
   tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
   currentContent = Buffer.from(tempCurrentContent, "binary")
-
   i = 0;
   while(extractedPointersIn4[i] != undefined){
 
@@ -784,7 +895,6 @@ function pointerAdjuster(data){
 //Before make the saves does some modifications to add or remove data to ensure that the defined
 //area of strings that will be edited don't be bigger or lesser than the original one on the original file.
 function saveProgress(options,replacement){
-
   if(options===1){
 
   }else if(listWidget.currentRow() === -1||stringEditorTextEdit.toPlainText()===""){
@@ -801,24 +911,23 @@ function saveProgress(options,replacement){
 
     listWidget.currentItem().setText(stringEditorTextEdit.toPlainText())
 
-    const conversion = Encoding.convert(listWidget.currentItem().text(), {
-      to: 'SJIS',
-      from: 'UNICODE',
-    });
-  
-    savedString = Buffer.from(conversion, "binary")
+    if(shiftJISEncoding===true){
+      const conversion = EncodingModule.convert(listWidget.currentItem().text(), {
+        to: 'SJIS',
+        from: 'UNICODE',
+      });
+      savedString = Buffer.from(conversion, "binary")
+    }else if(UTF8Encoding===true){
+      savedString = Buffer.from(listWidget.currentItem().text())
+    }
   }
 
   let newBuffer = Buffer.alloc(1)
   savedString = Buffer.concat([savedString,newBuffer])
 
-  // console.log(rawStrings[listWidget.currentRow()].length)
-  // console.log(savedString.length)
-
   if(pointer1AddressDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>savedString.length){
-      // console.log("Extra 00 added to rawStrings")
-  
+
       savedString = Buffer.concat([savedString,newBuffer])
       
     }
@@ -833,9 +942,13 @@ function saveProgress(options,replacement){
   if(pointer1AddressDecimal=== ""){
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
+  
     rawStrings[listWidget.currentRow()] = savedString
+    if(extractedStrings.length>extractedStringsOLD.length){
+      console.log("AAAAAAA")
+      extractedStringsOLD = Buffer.concat(rawStrings)
+    }
     extractedStrings = Buffer.concat(rawStrings)
-
 
   if(pointer1AddressDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>oldRawString.length){
@@ -852,20 +965,15 @@ function saveProgress(options,replacement){
 
     listWidget.item(listWidget.currentRow()).setText(rawStrings[listWidget.currentRow()].toString("utf8"))
     stringEditorTextEdit.setPlainText(rawStrings[listWidget.currentRow()].toString("utf8"))
-
     extractedStrings = Buffer.concat(rawStrings)
   }else{
 
     if(pointersTableMode===false){
-      while(extractedStrings.length>extractedStringsOLD.length){
-     
+      while(extractedStrings.length>originalLenght){
         extractedStrings = extractedStrings.slice(0,-1)
-    
-        if(extractedStrings.length===extractedStringsOLD.length){
-          
+        if(extractedStrings.length===originalLenght){
           extractedStrings = extractedStrings.slice(0,-1)
           extractedStrings = Buffer.concat([extractedStrings,newBuffer])
-         
         }
       }
     }
@@ -934,17 +1042,18 @@ function saveProgress(options,replacement){
   // }
 
   while(extractedStrings.length<extractedStringsOLD.length){
-    
-    extractedStrings = Buffer.concat([extractedStrings,newBuffer])
 
+    extractedStrings = Buffer.concat([extractedStrings,newBuffer])
   }
 
   let tempCurrentContent = currentContent.toString("binary")
   let tempExtractedStrings = extractedStrings.toString("binary")
+  string2AddressDecimal= parseInt(lastStringAddressLineEdit.text(),16)
 
   tempCurrentContent = tempCurrentContent.substring(0,string1AddressDecimal) + tempExtractedStrings  + tempCurrentContent.substring(string2AddressDecimal)
+  
+ 
   currentContent = Buffer.from(tempCurrentContent, "binary")
-
   if(pointer1AddressDecimal=== ""){
 
   spaceLeftFunc(extractedStrings)
@@ -968,6 +1077,7 @@ function saveProgress(options,replacement){
   },
   (err) => {
     if (err){
+      errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("ERROR! maybe the file is being used?")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
@@ -1031,6 +1141,13 @@ function saveConfiguration(){
       Buffer.from(lastStringAddressLineEdit.text(), "utf8").toString("hex") + "0d0a" +
       Buffer.from(filePathQLineEditRead.text(), "utf8").toString("hex") + "0d0a" 
 
+      if(UTF8Encoding===true){
+        projectsConfHexArr[i] = projectsConfHexArr[i] + 
+        Buffer.from("0", "utf8").toString("hex") + "0d0a"
+      }else if(shiftJISEncoding===true){
+        projectsConfHexArr[i] = projectsConfHexArr[i] +
+        Buffer.from("1", "utf8").toString("hex") + "0d0a"
+      }
 
       if (projectsConfHexArr[i+1] ===undefined){
         projectsConfHexArr[i+1]= Buffer.from(`${i+2}`).toString("hex") + "0d0a0d0a0d0a0d0a0d0a0d0a0d0a"
@@ -1064,7 +1181,7 @@ function saveConfiguration(){
   },(err) => {
   
   if (err){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("ERROR! maybe the file is being used?")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -1101,6 +1218,7 @@ function setDefaultValues(options){
     currentTableContent = []
     organizedSections = []
     oldSelectedTablePointers = []
+    sectionNameNumber.setText(1)
   }else{
     sectionNameLineEdit.setText("")
     firstPointerAddressLineEdit.setText("")
@@ -1137,11 +1255,15 @@ function setDefaultValues(options){
   oldSelectedString = -1
   sharedPointers = 0
   oldMatchedSharedPointers = []
-  sectionNameHeader= "Section name"
+
   hiddenPointers = 0
+  stringsOffset = 0
+  stringsOldOffset = 0
 
   listWidget.clear()
+  listWidget.scrollToTop()
   pointersViewerlistWidget.clear()
+  pointersViewerlistWidget.scrollToTop()
   exportAllButton.setEnabled(false)
   csvButton.setEnabled(false)
   csvButton2.setEnabled(false)
@@ -1151,13 +1273,19 @@ function setDefaultValues(options){
   pointersEditorLabel.setEnabled(false)
   pointersEditor.setEnabled(false)
   pointersViewerForSharedPointersListWidget.setEnabled(false)
-  action5.setEnabled(false)
+  mainMenuAction3.setEnabled(false)
   bigEndian.setEnabled(true)
   fastButton.setEnabled(true)
 
   stringEditorTextEdit.setPlainText("")
 
-  sectionDetailsLabel.setText(`Section name: String#N/A`)
+  if(pointersTableMode===false){
+  sectionNameHeader= "Section name"
+  }else{
+
+  }
+
+  sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`)
   spaceLeftLabel.setText(`Space left: N/A`)
   pointerValuesLabel.setText(`Pointer HexValues: N/A`)
   pointerAddressLabel.setText("Pointer Address: N/A")
@@ -1189,6 +1317,11 @@ function loadConfiguration(){
 
     console.log(`Not valid data for ${sectionNameNumber.text()}, hex spaces will be empty`)
     setDefaultValues()
+
+    if(exportAllMode===true){
+      stopExport =true
+    }
+
     start()
 
   }else{
@@ -1206,6 +1339,7 @@ function loadConfiguration(){
     }else{
       sectionNameLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[1], "hex").toString("utf8"))
       sectionNameHeader = sectionNameLineEdit.text()
+
       sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`)
     }
 
@@ -1225,6 +1359,7 @@ function loadConfiguration(){
 
   
     firstStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[4], "hex").toString("utf8"))
+    
     lastStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[5], "hex").toString("utf8"))
     filePathQLineEditRead.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6], "hex").toString("utf8"))
     selectedFile = [`${`${Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6], "hex").toString("utf8")}`}`]
@@ -1234,15 +1369,27 @@ function loadConfiguration(){
 }
 
 // +1 to sectionNameNumber
-function plus1(tableMode){
-
+function plus1(tableMode,options){
 
   if(tableMode===false){
     if(sectionNameNumber.text() === "255 "){
       return
     }
-    sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
-    loadConfiguration()
+    if(exportAllModeVariable===0){
+      sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
+      loadConfiguration()
+
+    }else if(options>1&&exportAllModeVariable===2){
+      sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
+      loadConfiguration()
+      saveAndPrepare()
+
+    }else if(options>1&&exportAllModeVariable===1){
+      sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
+      loadConfiguration()
+      saveAndPrepare2()
+    }
+
   }else{
     if(sectionNameNumber.text() === `${sectionedCurrentContent.length} `){
       return
@@ -1264,6 +1411,17 @@ function minus1(tableMode){
   }else{
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
 
+    loadPTConfiguration()
+  }
+}
+
+function goToStart(){
+
+  sectionNameNumber.setText(1 + " ")
+
+  if(pointersTableMode===false){
+    loadConfiguration()
+  }else if(pointersTableMode===true){
     loadPTConfiguration()
   }
 }
@@ -1307,28 +1465,119 @@ function specificCharactersPerLine(x){
   }
 }
 
-//Organize the data from the csv given by the user, saving them in
-//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
-function csvTranslation(options){
+function csvSelection(){
   const csvFileDialog = new QFileDialog()
   csvFileDialog.setNameFilter("*.csv")
   csvFileDialog.setWindowTitle("Choose a .csv file")
-  csvFileDialog.exec();
   let selectedCsv
+  let goBack = true
+  csvFileDialog.addEventListener("fileSelected",function(){
 
-  if(csvFileDialog.selectedFiles().length!=0&&
-  fs.lstatSync(csvFileDialog.selectedFiles()[0]).isDirectory()===false&&
-  path.extname(`${csvFileDialog.selectedFiles()[0].toLowerCase()}`)===".csv"){
+    if(csvFileDialog.selectedFiles().length!=0&&
+    fs.lstatSync(csvFileDialog.selectedFiles()[0]).isDirectory()===false&&
+    path.extname(`${csvFileDialog.selectedFiles()[0].toLowerCase()}`)===".csv"){
+  
+      selectedCsv = csvFileDialog.selectedFiles();
+      goBack=false
+    }else{
+  
+      return null
+    }
 
-    selectedCsv = csvFileDialog.selectedFiles();
-  }else{
+  })
 
+  csvFileDialog.exec();
+
+  if(goBack===true){
+    return null
+  }
+  return selectedCsv
+}
+
+//Organize the data from the csv given by the user, saving them in
+//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
+function csvTranslation(options){
+
+  let selectedCsv = csvSelection()
+
+  if(selectedCsv===null){
     return
   }
 
   let csvContent = fs.readFileSync(`${selectedCsv}`);
 
+  let testCsvContent = csvContent.toString("hex").split("0d0a")
+  testCsvContent[0] = testCsvContent[0].replace("efbbbf","")
+
   let i = 0;
+  let nextBadSemicolonWillStopTheTest = true
+
+  if(testCsvContent[0].includes("3b")===true){
+
+  }else{
+    errorMessageBox.setText(`Seems to be that your .csv file is not separated by
+    semicolons, a .csv file separated by semicolons will be created in the root 
+    folder, please try to use it.`)
+    errorMessageBox.setWindowTitle("Error, check your '.csv' file")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+
+    fs.writeFile(`./NewCsv.csv`,Buffer.from("EFBBBF48656C6C6F3B486F6C610D0A","hex"),{
+      encoding: "utf8",
+      flag: "w",
+      mode: 0o666
+    },(err) => {
+  
+      if (err){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! .csv could not be created D:\n")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+      else{
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText(`New .csv created sucessfully`)
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+    })
+    return
+  }
+
+  while(testCsvContent[i] !=undefined){
+
+
+    if(testCsvContent[i]==="3b"){
+
+      nextBadSemicolonWillStopTheTest = true
+
+    }else if(testCsvContent[i].substring(0,2)!="3b" &&testCsvContent[i].substring(testCsvContent[i].length-2)!="3b"){
+
+      nextBadSemicolonWillStopTheTest = false
+
+    }else if(testCsvContent[i].substring(0,2)==="3b" &&nextBadSemicolonWillStopTheTest === true){
+
+      errorMessageBox.setText(`The text #${i+1} to be translated has not it\n translated counterpart.`)
+      errorMessageBox.setWindowTitle("Error, check your .csv file")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return
+
+    }else if(testCsvContent[i].substring(testCsvContent[i].length-2)==="3b"&&nextBadSemicolonWillStopTheTest === true){
+
+      errorMessageBox.setText(`The replacement text #${i+1} has not it untranslated\ncounterpart.`)
+      errorMessageBox.setWindowTitle("Error, check your .csv file")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return
+
+    }
+    i=i+1
+  }
+  testCsvContent=""
+
+
+  i = 0
   let k = 0;
   let m = 0;
   let mode = 0;
@@ -1390,7 +1639,7 @@ function csvTranslation(options){
   i = 0;
   k = 0;
 
-  //Japanese Strings
+  //Encoded Strings
   let stringToSearchTemp = []
   stringToSearchTemp[0] = ""
   let stringToSearchBuffer = []
@@ -1418,68 +1667,113 @@ function csvTranslation(options){
   i = 0;
   k = 0;
 
-  let replacementStringsInShiftJis = []
-  let replacementStringsInShiftJisBuffer = []
+  let replacementStringsEncoded = []
+  let replacementStringsEncodedBuffer = []
 
   while(replacementStringsBuffer[i]!= undefined){
 
-    replacementStringsInShiftJis[i] = Encoding.convert(replacementStringsBuffer[i].toString("utf8"), {
-      to: 'SJIS',
-      from: 'UNICODE',
-    });
-    replacementStringsInShiftJis[i] = replacementStringsInShiftJis[i].replaceAll('"."','."')
-    replacementStringsInShiftJis[i] = replacementStringsInShiftJis[i].replaceAll('"."','."')
-    replacementStringsInShiftJis[i] = replacementStringsInShiftJis[i].replaceAll('"""','""')
-    replacementStringsInShiftJis[i] = replacementStringsInShiftJis[i].replaceAll('""','"')
-    replacementStringsInShiftJisBuffer[k] = Buffer.from(replacementStringsInShiftJis[i], "binary")
-    if(replacementStringsInShiftJis[i] === ''){
+    if(shiftJISEncoding ===true){
+      replacementStringsEncoded[i] = EncodingModule.convert(replacementStringsBuffer[i].toString("utf8"), {
+        to: 'SJIS',
+        from: 'UNICODE',
+      });
 
-      k= k-1;
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"""','""')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('""','"')
+      replacementStringsEncodedBuffer[k] = Buffer.from(replacementStringsEncoded[i], "binary")
+      if(replacementStringsEncoded[i] === ''){
+  
+        k= k-1;
+      }
+      k=k+1;
+      i=i+1;
+    }else if(UTF8Encoding===true){
+
+      replacementStringsEncoded[i] = replacementStringsBuffer[i].toString("utf8")
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"""','""')
+      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('""','"')
+      replacementStringsEncodedBuffer[k] = Buffer.from(replacementStringsEncoded[i])
+      if(replacementStringsEncoded[i] === ''){
+  
+        k= k-1;
+      }
+      k=k+1;
+      i=i+1;
     }
-    k=k+1;
-    i=i+1;
+
   }
 
   i = 0;
   k=0;
-  let stringToSearchInShiftJis = []
-  let stringToSearchInShiftJisBuffer = []
+  let stringToSearchEncoded = []
+  let stringToSearchEncodedBuffer = []
 
   while(stringToSearchBuffer[i]!= undefined){
 
-    stringToSearchInShiftJis[i] = Encoding.convert(stringToSearchBuffer[i].toString("utf8"), {
-      to: 'SJIS',
-      from: 'UNICODE',
-    });
+    if(shiftJISEncoding===true){
+      stringToSearchEncoded[i] = EncodingModule.convert(stringToSearchBuffer[i].toString("utf8"), {
+        to: 'SJIS',
+        from: 'UNICODE',
+      });
+  
+      stringToSearchEncodedBuffer[k] = Buffer.from(stringToSearchEncoded[i], "binary")
+      if(stringToSearchEncoded[i] === ''){
+        k= k-1;
+      }
+      k= k+1;
+      i=i+1;
+    }else if(UTF8Encoding===true){
 
-    stringToSearchInShiftJisBuffer[k] = Buffer.from(stringToSearchInShiftJis[i], "binary")
-    if(stringToSearchInShiftJis[i] === ''){
-      k= k-1;
+      stringToSearchEncoded[i] = stringToSearchBuffer[i].toString("utf8")
+      stringToSearchEncodedBuffer[k] = Buffer.from(stringToSearchEncoded[i])
+
+      if(stringToSearchEncoded[i] === ''){
+        k= k-1;
+      }
+      k= k+1;
+      i=i+1;
     }
-    k= k+1;
-    i=i+1;
+
   }
 
-  if(replacementStringsInShiftJisBuffer.length != stringToSearchInShiftJisBuffer.length){
+
+  if(replacementStringsEncodedBuffer[replacementStringsEncodedBuffer.length-1].toString("hex").length===0){
+    replacementStringsEncodedBuffer.pop()
+  }else if(stringToSearchEncodedBuffer[stringToSearchEncodedBuffer.length-1].toString("hex").length===0){
+    stringToSearchEncodedBuffer.pop()
+  }
+
+  if(replacementStringsEncodedBuffer.length != stringToSearchEncodedBuffer.length){
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("The csv contains strings without a translation or text to be translated")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
   }
+  csvTranslationMode = true
+foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options)
+}
 
-  foundAndReplaceIfMatch(replacementStringsInShiftJisBuffer,stringToSearchInShiftJisBuffer,options)
-  setDefaultValues(1)
-  saveAndPrepare()
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 //Uses the data from  and stringToSearchInShiftJisBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
 //translated text in replacementStringsInShiftJisBuffer/replaceStrings.
 async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
+  let lastCsvTranslationLogOriginal = []
+  let lastCsvTranslationLogReplacement = []
+  let lastCsvTranslationLogReplacementClean = []
 
   let i =0;
   let k = 0;
-
   if(options===1){
 
     while(rawStrings[i] != undefined){
@@ -1495,18 +1789,19 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
             if(fastButton.isChecked()===true){
 
             }else{
-              function sleep(ms) {
-                return new Promise((resolve) => {
-                  setTimeout(resolve, ms);
-                });
-              }
+
+              errorMessageBox.setWindowTitle("Task in progress, please wait")
               errorMessageBox.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
               errorMessageButton.setText("                                                Ok                                              ")
               errorMessageBox.show()
               await sleep(150);
             }
 
-            listWidget.setCurrentRow(i)
+          lastCsvTranslationLogReplacement[i] = tempReplaceString.toString("utf8").replace(/\x00\x00/g, '[CHECK]')
+          lastCsvTranslationLogReplacementClean[i] = tempReplaceString.toString("utf8").replace(/\x00/g,"")
+          lastCsvTranslationLogOriginal[i] = rawStrings[i].toString("utf8")
+
+          listWidget.setCurrentRow(i)
           saveProgress(1,tempReplaceString)
         }
   
@@ -1515,6 +1810,7 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
   
       k=0;
       i=i+1;
+
     }
   }else{
     while(rawStrings[i] != undefined){
@@ -1522,30 +1818,33 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
       while(replaceStrings[k]!= undefined){
         let tempSearchString= searchStrings[k].toString("hex")
   
-        if(rawStrings[i].length>searchStrings[k].length){
-          while(tempSearchString.length<rawStrings[i].toString("hex").length){
+        if(rawStrings[i].length>Buffer.from(searchStrings[k].toString("hex").replaceAll("0a200a","0a0a"),"hex").length){
+          while(tempSearchString.replaceAll("0a200a","0a0a").length<rawStrings[i].toString("hex").length){
             tempSearchString= tempSearchString +"00"
           }
         }
   
-        if(rawStrings[i].toString("hex").includes(searchStrings[k].toString("hex")+"00") === true 
+        if(rawStrings[i].toString("hex").includes(searchStrings[k].toString("hex").replaceAll("0a200a","0a0a")+"00") === true 
           && searchStrings[k].toString("hex") != ""
-          &&rawStrings[i].toString("hex")===tempSearchString){
+          && rawStrings[i].toString("hex")===tempSearchString.replaceAll("0a200a","0a0a")){
         
   
             if(fastButton.isChecked()===true){
 
             }else{
-              function sleep(ms) {
-                return new Promise((resolve) => {
-                  setTimeout(resolve, ms);
-                });
-              }
-              errorMessageBox.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}\n`)
+
+              errorMessageBox.setWindowTitle("Task in progress, please wait")
+              errorMessageBox.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
               errorMessageButton.setText("                                                Ok                                              ")
               errorMessageBox.show()
               await sleep(150);
             }
+
+
+          lastCsvTranslationLogReplacement[k]= replaceStrings[k].toString("utf8").replace(/\x00\x00/g,"[CHECK]")
+          lastCsvTranslationLogReplacementClean[k] = replaceStrings[k].toString("utf8").replace(/\x00/g,"")
+          lastCsvTranslationLogOriginal[k] = searchStrings[k].toString("utf8")
+
 
           listWidget.setCurrentRow(i)
           saveProgress(1,replaceStrings[k])
@@ -1556,77 +1855,809 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
   
       k=0;
       i=i+1;
+
+
+    }
+    if(pointer1AddressDecimal!="" &&csvTranslationMode===true){
+      console.log("csv Transladion end 1")
+      csvTranslationMode = false
+      let rawLenght1 = rawStrings.length
+      saveAndPrepare()
+      let rawLenght2 = rawStrings.length
+
+      if(rawLenght1>rawLenght2){
+        errorMessageBox.setText(`The process ended with fewer strings compared to when it\nstarted, please double-check the last strings and\npointers there are maybe some pointers duplicated.`)
+        errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+
+    }else if(pointer1AddressDecimal==="" &&csvTranslationMode===true){
+      console.log("csv Transladion end 2")
+      csvTranslationMode = false
+      let rawLenght1 = rawStrings.length
+      saveAndPrepare2()
+      let rawLenght2 = rawStrings.length
+
+      if(rawLenght1>rawLenght2){
+        errorMessageBox.setText(`The process ended with fewer strings compared to when it\nstarted, please double-check the last strings and\npointers there are maybe some pointers duplicated.`)
+        errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
     }
   }
 
+
+
+  const duplicates = lastCsvTranslationLogReplacementClean.filter((item, index) => index !== lastCsvTranslationLogReplacementClean.indexOf(item))
+
+  if(lastCsvTranslationLogReplacementClean.length-duplicates.length!=lastCsvTranslationLogReplacement.length){
+
+    let needsCheck = lastCsvTranslationLogReplacement.filter((replacement) => replacement.includes("[CHECK]"))
+
+    needsCheck = needsCheck.map(function(x) {return x.replace(/\x00/g,"")})
+    needsCheck = needsCheck.map(function(x) {return x.replace("[CHECK]","")})
+
+    if(needsCheck.length!=0&&duplicates.length===0){
+      errorMessageBox.setWindowTitle("Warning")
+      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.show()
+      return
+    }else if(needsCheck.length===0&&duplicates.length!=0){
+      errorMessageBox.setWindowTitle("Warning")
+      errorMessageBox.setText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.show()
+      return
+    }else{
+      errorMessageBox.setWindowTitle("Warning")
+      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.show()
+      return
+    }
+  }
+  
+  await sleep(300);
+
+  errorMessageBox.setWindowTitle("Task completed")
   errorMessageBox.setText(`Task Completed`)
   errorMessageButton.setText("                                                Ok                                              ")
   errorMessageBox.show()
 }
 
-//Makes a csv that contains the strings and pointers from currentContent.
-function exportAll(){
-let i = 0
+function exportAllSelection(){
 
-let dataToExport = Buffer.from("efbbbf0d0a", "hex")
+  const exportAllSelectionDialog = new QDialog()
+  const exportAllSelectionRow1 = new QWidget()
+  const exportAllSelectionMiddleRow = new QWidget()
+  const exportAllSelectionRow2 = new QWidget()
+  const exportAllSelectionDialogLayout = new QBoxLayout(2)
+  const exportAllSelectionRow1Layout = new QBoxLayout(0)
+  const exportAllCheckButton = new QCheckBox()
+  const exportAllSelectionRow2Layout = new QBoxLayout(0)
+  const exportAllSelectionMiddleRowLayout = new QBoxLayout(0)
 
-  if(pointer1AddressDecimal === ""){
+  exportAllSelectionRow1.setLayout(exportAllSelectionRow1Layout)
+  exportAllSelectionRow2.setLayout(exportAllSelectionRow2Layout)
+  exportAllSelectionMiddleRow.setLayout(exportAllSelectionMiddleRowLayout)
 
-    while (rawStrings[i]!= undefined ){
+  exportAllSelectionDialog.setFixedSize(300,160)
+
+  exportAllSelectionDialog.setLayout(exportAllSelectionDialogLayout)
+  exportAllSelectionDialog.setModal(true)
+
+  exportAllSelectionDialog.setWindowTitle("Select one export option")
+  exportAllCheckButton.setText("Add Section name")
+  exportAllCheckButton.setCheckState(2)
+  exportAllCheckButton.setToolTip("It will add the section name of each group of data.")
+
+  const exportAllSelectionStringsButton = new QPushButton()
+  const exportAllSelectionStringsAndMoreButton = new QPushButton()
+
+  exportAllSelectionRow1Layout.addWidget(exportAllSelectionStringsButton)
+  exportAllSelectionRow1Layout.addWidget(exportAllSelectionStringsAndMoreButton)
+  exportAllSelectionMiddleRowLayout.addWidget(exportAllCheckButton,0,132)
+
+  if(pointersTableMode===false){
+
+    const exportAllSelectionAllStringsButton = new QPushButton()
+    const exportAllSelectionAllStringsAndMoreButton = new QPushButton()
+    
+    exportAllSelectionRow2Layout.addWidget(exportAllSelectionAllStringsButton)
+    exportAllSelectionRow2Layout.addWidget(exportAllSelectionAllStringsAndMoreButton)
+
+    exportAllSelectionDialogLayout.addWidget(exportAllSelectionRow1)
+    exportAllSelectionDialogLayout.addWidget(exportAllSelectionMiddleRow)
+    exportAllSelectionDialogLayout.addWidget(exportAllSelectionRow2)
 
 
-      dataToExport = dataToExport + listWidget.item(i).text().toString("hex").replaceAll("00","") + `\n\n`
+
+    exportAllSelectionStringsAndMoreButton.addEventListener("clicked",function (){
+      exportAll(0,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionStringsButton.addEventListener("clicked",function (){
+      exportAll(1,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+
+    exportAllSelectionAllStringsButton.addEventListener("clicked",function (){
+      exportAll(2,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionAllStringsAndMoreButton.addEventListener("clicked",function (){
+      exportAll(3,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+
+    win.addEventListener("Close", function (){
+      exportAllSelectionDialog.close(true)
+    })
+
+    exportAllSelectionStringsButton.setText("Strings of this section")
+    exportAllSelectionStringsButton.setToolTip("Exports all the Strings found in this section\nof the file using this configuration.")
+   
+    exportAllSelectionAllStringsButton.setText("Strings of all sections")
+    exportAllSelectionAllStringsButton.setToolTip("Exports all the strings found in all sections.\nWarning: Be sure that all the sections are properly set up")
+    
+    exportAllSelectionStringsAndMoreButton.setText("All of this section")
+
+    exportAllSelectionAllStringsAndMoreButton.setText("All data from sections")
+    if(pointer1AddressDecimal === ""){
+
+      exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings and their Address found in this section\nof the file using this configuration.")
       
-      dataToExport = dataToExport + ";"
+      exportAllSelectionAllStringsAndMoreButton.setToolTip("Exports all the strings and Address found in all sections.\nWarning: Be sure that all the sections are properly set up")
+    }else{
 
-      dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n`
-
-      i=i+1
+      exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings, Pointers, etc found in this section\nof the file using this configuration.")
+      
+      exportAllSelectionAllStringsAndMoreButton.setToolTip("Exports all the Strings, Pointers, etc found in all sections.\nWarning: Be sure that all the sections are properly set up")
     }
 
+    exportAllSelectionDialog.exec()  
 
-  }else{
+  }else if(pointersTableMode===true){
 
-    while (rawStrings[i]!= undefined){
+    exportAllSelectionRow2.setLayout(exportAllSelectionRow2Layout)
+    const exportAllSelectionStringsInFolderButton = new QPushButton()
+    const exportAllSelectionAllInFolderButton = new QPushButton()
+  
+    exportAllSelectionRow2Layout.addWidget(exportAllSelectionStringsInFolderButton)
+    exportAllSelectionRow2Layout.addWidget(exportAllSelectionAllInFolderButton)
+  
+    exportAllSelectionDialogLayout.addWidget(exportAllSelectionRow1)
+    exportAllSelectionDialogLayout.addWidget(exportAllSelectionRow2)
+    
+    exportAllSelectionStringsButton.setText("Strings of this .pt")
+    exportAllSelectionStringsButton.setToolTip("Exports all the Strings of the current Pointers Table.")
+    
+    exportAllSelectionStringsAndMoreButton.setText("All on this .pt")
+    exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings, Pointers, etc on this Pointers Table.")
+    
+    exportAllSelectionStringsInFolderButton.setText("Strings in all .pt files")
+    exportAllSelectionStringsInFolderButton.setToolTip("Export all the strings on all the Pointers Tables found\n in the Pointers Tables folder.\nWarning: Be sure that all the tables works without errors.")
+    
+    exportAllSelectionAllInFolderButton.setText("All")
+    exportAllSelectionAllInFolderButton.setToolTip("All")
+  
+    exportAllSelectionStringsAndMoreButton.addEventListener("clicked",function (){
+      exportAll(0,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionStringsButton.addEventListener("clicked",function (){
+      exportAll(1,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionStringsInFolderButton.addEventListener("clicked",function(){
+      exportAll(2,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionAllInFolderButton.addEventListener("clicked",function(){
+      exportAll(3,exportAllCheckButton.isChecked())
+      exportAllSelectionDialog.close(true)
+    })
+  
+    win.addEventListener("Close", function (){
+      exportAllSelectionDialog.close(true)
+    })
+  
+    exportAllSelectionDialog.exec()
+  }
+  
+}
 
-      dataToExport = dataToExport + listWidget.item(i).text().toString("hex").replaceAll("00","") + `\n\n` + ";"
-      dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
-      dataToExport = dataToExport + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
-      dataToExport = dataToExport + addressOfEachPointer[i] + `\n\n`+ ";;;;"
-      dataToExport = dataToExport + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
+function exportOnlyStringsOfSection(dataToExport,addFileName){
+  let i = 0
+
+  if(addFileName===true){
+    dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
+  }
+  while (rawStrings[i]!= undefined ){
+  
+    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+    
+    i=i+1
+  }
+  return dataToExport
+}
+
+function exportStringsAndAddressOfSection(dataToExport,addFileName){
+  
+  if(addFileName===true){
+    dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
+  }
+
+  let i = 0
+  while (rawStrings[i]!= undefined ){
+  
+    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+    
+    dataToExport = dataToExport + ";"
+
+    dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n`
+
+    i=i+1
+  }
+  return dataToExport
+}
+
+function exportStringsFromAllSections(dataToExport,options,addFileName){
+  
+  dataToExport = []
+  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+
+  exportAllModeVariable = 1
+  let i = 0
+  exportAllMode =true
+  let l =0
+  goToStart()
+  saveAndPrepare2()
+
+  while(stopExport ===false){
+    i= 0
+
+    if(addFileName===true){
+      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
+    }
+
+    while (rawStrings[i]!= undefined &&skipExport===false){
+
+      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+      
+      i=i+1
+    }
+    if(skipExport===false){
+      l=l+1
+      dataToExport[l] = ""
+    }
+
+    // dataToExport[l] = String(dataToExport[l]).replaceAll("undefined","")
+    skipExport=false
+    plus1(pointersTableMode,options)
+  }
+  
+  return dataToExport
+}
+
+function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName){
+  
+  dataToExport = []
+  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+
+  exportAllModeVariable = 1
+
+  let i = 0
+  let l =0
+
+  exportAllMode =true
+
+  goToStart()
+  saveAndPrepare2()
+
+  while(stopExport ===false){
+    i= 0
+
+    if(addFileName===true){
+      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
+    }
+      while (rawStrings[i]!= undefined &&skipExport===false){
+
+
+        dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+      
+        dataToExport[l] = dataToExport[l] + ";"
+
+        dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n`
+
+        i=i+1
+      }
+
+      if(skipExport===false){
+        l=l+1
+        dataToExport[l] = ""
+      }
+    skipExport=false
+    plus1(pointersTableMode,options)
+  }
+  
+  return dataToExport
+}
+
+function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
+  dataToExport = []
+  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+
+  let i = 0
+  let l =0
+  
+  exportAllMode =true
+
+  goToStart()
+  saveAndPrepare()
+
+  while(stopExport ===false){
+    i= 0
+
+    if(addFileName===true&&skipExport===false){
+      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
+    }
+    while (rawStrings[i]!= undefined&&skipExport===false){
+
+      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+      dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
+      dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
+      dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
+      dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
 
       if(rawStrings[i+1]=== undefined){
         let k = 0;
         while(extractedPointersIn4[k] != undefined){
 
 
-          dataToExport = dataToExport + ";;;;;"
+          dataToExport[l] = dataToExport[l] + ";;;;;"
     
-          dataToExport = dataToExport + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
+          dataToExport[l] = dataToExport[l] + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
           k= k+1;
         }
       }
       i= i+1;
     }
+    if(skipExport===false){
+      l=l+1
+      dataToExport[l] = ""
+    }
+    plus1(pointersTableMode,options)
+  }
+  return dataToExport
+}
+
+function checkForSemicolons(listWidgetString,style){
+  let i =0
+  if(listWidgetString.includes(";")===true){
+
+    if(style===0){
+      listWidgetString = listWidgetString.split("\n")
+    }else if(style===1){
+      listWidgetString = listWidgetString.split(";\r\n")
+    }else{
+      listWidgetString = listWidgetString.split("\r\n")
+    }
+
+    while(listWidgetString[i]!=undefined){
+
+      if(listWidgetString[i].includes(";") &&
+      listWidgetString[i][0]!=`"` &&
+      listWidgetString[i][listWidgetString[i]-1]!=`"`){
+        
+        listWidgetString[i] = `"${listWidgetString[i]}"`
+
+      }
+      i=i+1
+    }
   }
 
-  fs.writeFile(`./exportedData.csv`,`${dataToExport}`,{
-    encoding: "utf8",
-    flag: "w",
-    mode: 0o666
-  },(err) => {
+  if(listWidgetString.includes("-")===true){
 
-    if (err){
-      errorMessageBox.setText("ERROR! maybe the file is being used?")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
+    i =0
+
+    if(style===0){
+      listWidgetString = listWidgetString.split("\n")
+    }else if(style===1){
+      listWidgetString = listWidgetString.split(";\r\n")
+    }else{
+      listWidgetString = listWidgetString.split("\r\n")
     }
-    else{
-      errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
+
+    while(listWidgetString[i]!=undefined){
+
+      if(listWidgetString[i][0]==="-"){
+        
+        listWidgetString[i] = ` ${listWidgetString[i]}`
+
+      }
+      i=i+1
     }
-  })
+  }
+
+  if(Array.isArray(listWidgetString)===true){
+    if(style===0){
+      listWidgetString = listWidgetString.join("\n")
+    }else if(style===1){
+      listWidgetString = listWidgetString.join(";\r\n")
+    }else{
+      listWidgetString = listWidgetString.join("\r\n")
+    }
+  }
+
+  return listWidgetString
+}
+
+function checkForBlankSpaces(listWidgetString){
+
+  if(listWidgetString.includes("\n\n\n\n\n")===true){
+
+    listWidgetString = listWidgetString.replaceAll("\n\n\n\n\n","\n \n \n \n \n")
+  }
+
+  if(listWidgetString.includes("\n\n\n\n")===true){
+
+    listWidgetString = listWidgetString.replaceAll("\n\n\n\n","\n \n \n \n")
+  }
+
+  if(listWidgetString.includes("\n\n\n")===true){
+
+    listWidgetString = listWidgetString.replaceAll("\n\n\n","\n \n \n")
+  }
+  
+  if(listWidgetString.includes("\n\n")===true){
+
+    listWidgetString = listWidgetString.replaceAll("\n\n","\n \n")
+  }
+  
+  if(listWidgetString.includes("Please select a type of Pickaxe")){
+    console.log("break point")
+  }
+
+  if(listWidgetString[0]==="\n"){
+    listWidgetString  = ` ` +listWidgetString
+  }
+
+  if(listWidgetString[listWidgetString.length-1]==="\n"){
+    listWidgetString  = listWidgetString + ` `
+  }
+
+  return listWidgetString
+}
+
+//Makes a csv that contains the strings and pointers from currentContent.
+async function exportAll(options,addFileName){
+let i = 0
+
+let dataToExport = Buffer.from("efbbbf0d0a", "hex")
+let dataToExportFinal = []
+  if(pointersTableMode===false){
+
+    if(pointer1AddressDecimal === ""){
+
+      //All in this section
+      if(options===0){
+
+        dataToExport = exportStringsAndAddressOfSection(dataToExport,addFileName)
+
+      //Strings in this section
+      }else if(options===1){
+
+        dataToExport = exportOnlyStringsOfSection(dataToExport,addFileName)
+  
+      //Strings from all sections
+      }else if(options===2){
+
+        dataToExport = exportStringsFromAllSections(dataToExport,options,addFileName)
+      
+        //Strings and address from all sections
+      }else if(options===3){
+
+        dataToExport = exportStringsAndAddressFromAllSections(dataToExport,options,addFileName)
+      }
+
+    }else if (pointer1AddressDecimal != ""){
+  
+      if(options===0){
+        if(addFileName===true){
+          dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
+        }
+        while (rawStrings[i]!= undefined){
+  
+          dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+          dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
+          dataToExport = dataToExport + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
+          dataToExport = dataToExport + addressOfEachPointer[i] + `\n\n`+ ";;;;"
+          dataToExport = dataToExport + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
+    
+          if(rawStrings[i+1]=== undefined){
+            let k = 0;
+            while(extractedPointersIn4[k] != undefined){
+    
+              dataToExport = dataToExport + ";;;;;"
+        
+              dataToExport = dataToExport + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
+              k= k+1;
+            }
+          }
+          i= i+1;
+        }
+      }else if(options===1){
+
+        dataToExport = exportOnlyStringsOfSection(dataToExport,addFileName)
+
+      }else if(options===2){
+        dataToExport = exportStringsFromAllSections(dataToExport,options,addFileName)
+  
+      }else if(options===3){
+        exportAllModeVariable =2
+        dataToExport = exportStringsAndMoreFromAllSections(dataToExport,options,addFileName)
+      }
+    }
+    //Table Mode ON
+  }else if(pointersTableMode===true){
+    exportAllMode =true
+    dataToExport = []
+    dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+    let l =0
+    goToStart()
+
+    if(options===0){
+
+      while(l!=sectionedCurrentContent.length){
+          i= 0
+          if(addFileName===true){
+            if(dataToExport[l]===undefined){
+              dataToExport[l]= ""
+            }
+            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
+          }
+        while (rawStrings[i]!= undefined ){
+    
+    
+          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+          dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
+          dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
+          dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
+          dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
+    
+          if(rawStrings[i+1]=== undefined){
+            let k = 0;
+            while(extractedPointersIn4[k] != undefined){
+    
+              dataToExport[l] = dataToExport[l] + ";;;;;"
+        
+              dataToExport[l] = dataToExport[l] + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
+              k= k+1;
+            }
+          } 
+          i=i+1
+        }
+        if(skipExport===false){
+          l=l+1
+          dataToExport[l] = ""
+        }
+        plus1(pointersTableMode)
+      }
+
+    }else if(options===1){
+
+      while(l!=sectionedCurrentContent.length){
+          i= 0
+          if(addFileName===true){
+            if(dataToExport[l]===undefined){
+              dataToExport[l]= ""
+            }
+            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
+          }
+        while (rawStrings[i]!= undefined ){
+    
+    
+          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+            
+          i=i+1
+        }
+        l=l+1
+        plus1(pointersTableMode)
+      }
+
+    }else if(options===2){
+
+
+      let list = []
+      let ptFilesList = []
+
+      list = await new Promise((resolve, reject) => {
+        return fs.readdir('./Pointers Tables/', (err, filenames) => err != null ? reject(err) : resolve(filenames))
+      })
+
+      if(list[0]===undefined){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! The folder doesn't exist or there are not files.")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+        return
+      } else{
+        let i =0
+        list.forEach(file => {
+          if(file.substring(file.length-3,file.length) ===".pt"&&fs.lstatSync(`./Pointers Tables/${file}`).isDirectory()===false){
+            ptFilesList[i] = file
+            i= i+1
+          }
+        })
+      }
+
+      let m = 0
+      while(ptFilesList[m]!= undefined){
+        selectedPTFile = `./Pointers Tables/${ptFilesList[m]}`
+        loadPointersTable(selectedPTFile)
+        l =0
+        dataToExport = []
+
+        if(m===0){
+          dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+        }
+
+        while(l!=sectionedCurrentContent.length){
+            i= 0
+            if(dataToExport[l]===undefined){
+              dataToExport[l]= ""
+            }
+            if(addFileName===true){
+              dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
+            }
+
+          while (rawStrings[i]!= undefined ){
+
+            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+              
+            i=i+1
+          }
+          if(skipExport===false){
+            l=l+1
+            dataToExport[l] = ""
+          }
+          plus1(pointersTableMode)
+        }
+        dataToExportFinal[m] = dataToExport.join("")
+        m=m+1
+      }
+
+    }else if(options===3){
+
+      let list = []
+      let ptFilesList = []
+
+      list = await new Promise((resolve, reject) => {
+        return fs.readdir('./Pointers Tables/', (err, filenames) => err != null ? reject(err) : resolve(filenames))
+      })
+
+      if(list[0]===undefined){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! The folder doesn't exist or there are not files.")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+        return
+      } else{
+        let i =0
+        list.forEach(file => {
+          if(file.substring(file.length-3,file.length) ===".pt"&&fs.lstatSync(`./Pointers Tables/${file}`).isDirectory()===false){
+            ptFilesList[i] = file
+            i= i+1
+          }
+        })
+      }
+
+      let m = 0
+      while(ptFilesList[m]!= undefined){
+        selectedPTFile = `./Pointers Tables/${ptFilesList[m]}`
+        loadPointersTable(selectedPTFile)
+        l =0
+        dataToExport = []
+
+        if(m===0){
+          dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+        }
+        
+        while(l!=sectionedCurrentContent.length){
+
+          if(dataToExport[l]===undefined){
+            dataToExport[l]= ""
+          }
+          if(addFileName===true){
+            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
+          }
+            i= 0
+          while (rawStrings[i]!= undefined ){
+      
+            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+            dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
+            dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
+            dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
+            dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
+          
+            i=i+1
+          }
+          if(skipExport===false){
+            l=l+1
+            dataToExport[l] = ""
+          }
+          plus1(pointersTableMode)
+        }
+        dataToExportFinal[m] = dataToExport.join("")
+        m=m+1
+      }
+    }
+  }
+  
+  exportAllModeVariable =0
+  skipExport=false
+  stopExport=false
+  exportAllMode= false
+
+  if(dataToExportFinal[0]===undefined){
+
+    if(Array.isArray(dataToExport)===true){
+      dataToExport = dataToExport.join("")
+    }
+
+    fs.writeFile(`./exportedData.csv`,`${dataToExport}`,{
+      encoding: "utf8",
+      flag: "w",
+      mode: 0o666
+    },(err) => {
+  
+      if (err){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! maybe the file is being used?")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+      else{
+        errorMessageBox.setWindowTitle("Task completed")
+        errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+    })
+  }else{
+
+    dataToExportFinal = dataToExportFinal.join("")
+
+      fs.writeFile(`./exportedData.csv`,`${dataToExportFinal}`,{
+        encoding: "utf8",
+        flag: "w",
+        mode: 0o666
+      },(err) => {
+    
+        if (err){
+          errorMessageBox.setWindowTitle("Error")
+          errorMessageBox.setText("ERROR! maybe the file is being used?")
+          errorMessageButton.setText("                                                Ok                                              ")
+          errorMessageBox.exec()
+        }
+        else{
+          errorMessageBox.setWindowTitle("Task completed")
+          errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
+          errorMessageButton.setText("                                                Ok                                              ")
+          errorMessageBox.exec()
+        }
+      })
+  }
+
 }
 
 //Depending of if Hide 0's from viewer is checked this function hide the 0's or not.
@@ -1655,7 +2686,6 @@ function highlightPointers(){
   
   if(pointer1AddressDecimal!= ""){
     let i =0;
-    let phase = 0
     sharedPointers=1
 
     pointersViewerForSharedPointersListWidget.clear()
@@ -1664,13 +2694,14 @@ function highlightPointers(){
 
     while(extractedPointersIn4[i] != undefined){
 
-      if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersHexValues[listWidget.currentRow()].toString("hex").toUpperCase() && phase===0){
+      if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersHexValues[listWidget.currentRow()].toString("hex").toUpperCase()){
           
         pointersViewerlistWidget.setCurrentRow(i)
         break
       }
 
-      else if(phase===0 &&i+2>extractedPointersIn4.length){
+      else if(i+2>extractedPointersIn4.length){
+        errorMessageBox.setWindowTitle("Error")
         errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\n are you sure that both pointer addresses are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
@@ -1687,14 +2718,14 @@ function highlightPointers(){
 function relocateToNewString(){
 
   if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i) ===null){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("The new pointer values are not valid")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
 
   }else if(numSpaceLeft<3){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Not enough space :/")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -1793,7 +2824,7 @@ function relocateToNewString(){
 function saveEditedPointer(){
 
   if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i) ===null){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("The new pointer values are not valid")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -1810,9 +2841,7 @@ function saveEditedPointer(){
   let tempExtractedPointers = extractedPointers.toString("binary")
 
   tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
-  
   currentContent = Buffer.from(tempCurrentContent, "binary")
-
   pointersViewerlistWidget.removeItemWidget(pointersViewerlistWidget.item(oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]))
 
   if(pointersViewerForSharedPointersListWidget.currentRow()===0){
@@ -1849,6 +2878,7 @@ function saveEditedPointer(){
   },
   (err) => {
     if (err){
+      errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("ERROR! maybe the file is being used?")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
@@ -1862,13 +2892,13 @@ function saveEditedPointer(){
 function getPointersTableData(){
 
   if(filePathQLineEditRead.text()==="N/A"){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("Not file selected, please select one first.")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
   }else if(fs.existsSync(`${filePathQLineEditRead.text()}`)===false){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("The choosed file is not there.\nInvalid file path, aborting...")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
@@ -1876,57 +2906,56 @@ function getPointersTableData(){
   }
 
   const createPointersDialog = new QDialog()
-  createPointersDialog.setWindowTitle('Create Pointers Table')
+  createPointersDialog.setModal(true)
+  win.addEventListener("Close", function (){
+    createPointersDialog.close(true)
+  })
+
+  createPointersDialog.setFixedSize(260,300)
+  createPointersDialog.setWindowTitle('Table Data')
 
   const createPointersDialogLayout = new QBoxLayout(2)
   createPointersDialog.setLayout(createPointersDialogLayout)
 
-  const pointerTableAdresses = new QWidget();
-  const pointerTableAdressesLayout = new FlexLayout();
-  pointerTableAdresses.setLayout(pointerTableAdressesLayout)
-  createPointersDialogLayout.addWidget(pointerTableAdresses)
-  pointerTableAdresses.setInlineStyle(`
-  flex-direction:column;
-  `)
+    //Table Name--------------------------------------------------------
 
-  //File Name--------------------------------------------------------
+  const pointersTableSectionNameTitle = new QWidget();
+
+  const pointersTableSectionNameTitleLayout = new FlexLayout();
+  pointersTableSectionNameTitle.setLayout(pointersTableSectionNameTitleLayout)
+
+  createPointersDialogLayout.addWidget(pointersTableSectionNameTitle)
 
   const pointersTableSectionNameLabel = new QLabel()
+  pointersTableSectionNameLabel.setText("Table name *")
   pointersTableSectionNameLabel.setAlignment(132)
   pointersTableSectionNameLabel.setInlineStyle(`
   border-color:black;
   border-style:solid;
   border-bottom-width:1px;
   `)
-  
-  pointersTableSectionNameLabel.setText("File name")
-  const pointersTableSectionName2 = new QWidget();
-  const pointersTableSectionNameLayout2 = new FlexLayout();
-  pointersTableSectionName2.setLayout(pointersTableSectionNameLayout2)
-  pointerTableAdressesLayout.addWidget(pointersTableSectionNameLabel)
-  pointerTableAdressesLayout.addWidget(pointersTableSectionName2)
-  pointersTableSectionName2.setInlineStyle(`
-  flex-direction: row;
-  `)
-  
-  const pointersTableSectionName = new QWidget();
-  const pointersTableSectionNameLayout = new FlexLayout();
-  pointersTableSectionName.setLayout(pointersTableSectionNameLayout)
-  pointerTableAdressesLayout.addWidget(pointersTableSectionName)
 
   const pointersTableSectionNameLineEdit = new QLineEdit();
-  pointersTableSectionNameLineEdit.setPlaceholderText("File name *")
-  pointersTableSectionNameLineEdit.setToolTip("Adds a name to the file that will save the configuration.")
-  pointersTableSectionNameLayout.addWidget(pointersTableSectionNameLineEdit)
+  pointersTableSectionNameLineEdit.setPlaceholderText("Table name")
+  pointersTableSectionNameLineEdit.setToolTip("Add a name for the Pointers Table.")
+  pointersTableSectionNameLineEdit.setInlineStyle(`
+  width:238px;
+  `)
+
+  pointersTableSectionNameTitleLayout.addWidget(pointersTableSectionNameLabel)
+  pointersTableSectionNameTitleLayout.addWidget(pointersTableSectionNameLineEdit)
+  let ptFileName =  filePathQLineEditRead.text().replace(/^.*[\\\/]/, "").split('.')[0]
+
+  pointersTableSectionNameLineEdit.setText(ptFileName)
   
   //Pointers Table Addresses--------------------------------------------------------
 
   const firstPointerTableAddressLineEdit = new QLineEdit();
   const lastPointerTableAddressLineEdit = new QLineEdit();
-  firstPointerTableAddressLineEdit.setToolTip("First pointer address in the file, for the section that you will translate (without 0x).")
+  firstPointerTableAddressLineEdit.setToolTip("1° Pointers Table Index pointer address in the file (without 0x). Usually is 0.")
   firstPointerTableAddressLineEdit.setPlaceholderText("First pointer address")
   lastPointerTableAddressLineEdit.setPlaceholderText("Post-last pointer address")
-  lastPointerTableAddressLineEdit.setToolTip("Post-last pointer address in the file, for the section that you will translate (without 0x).")
+  lastPointerTableAddressLineEdit.setToolTip("Post-last Pointers Table Index pointer address in the file (without 0x).\nUsually is the starting address of FFFFFFFFFFFFFFFF")
   lastPointerTableAddressLineEdit.setInlineStyle(`
   width:118px;
   font-size:11px;
@@ -1935,141 +2964,213 @@ function getPointersTableData(){
   width:119px;
   font-size:11px;
   `)
-
+  const pointerTableAddressWidget = new QWidget()
   const pointerTableAddressTitleWidget = new QWidget()
   const pointerTableAddressLineEditWidget = new QWidget()
 
-  pointerTableAdressesLayout.addWidget(pointerTableAddressTitleWidget)
-  pointerTableAdressesLayout.addWidget(pointerTableAddressLineEditWidget)
+  createPointersDialogLayout.addWidget(pointerTableAddressWidget)
 
+  const pointerTableAddressWidgetLayout = new FlexLayout()
   const pointerTableAddressTitleWidgetLayout = new FlexLayout()
   const pointerTableAddressLineEditWidgetLayout = new FlexLayout()
 
+  pointerTableAddressTitleWidget.setInlineStyle(`
+  flex-direction:row;
+
+  `)
   pointerTableAddressLineEditWidget.setInlineStyle(`
   flex-direction:row;
   `)
 
+  pointerTableAddressWidget.setLayout(pointerTableAddressWidgetLayout)
   pointerTableAddressTitleWidget.setLayout(pointerTableAddressTitleWidgetLayout)
   pointerTableAddressLineEditWidget.setLayout(pointerTableAddressLineEditWidgetLayout)
 
   const pointerTableAddressLineEditTitle = new QLabel();
-  pointerTableAddressLineEditTitle.setText("Pointers Table address *")
+  pointerTableAddressLineEditTitle.setText("Pointers Table Index *")
   pointerTableAddressLineEditTitle.setAlignment(132)
   pointerTableAddressLineEditTitle.setInlineStyle(`
+  width:238px;
   border-color:black;
   border-style:solid;
   border-bottom-width:1px;
   `)
 
-  pointerTableAddressTitleWidgetLayout.addWidget(pointerTableAddressLineEditTitle)
   pointerTableAddressLineEditWidgetLayout.addWidget(firstPointerTableAddressLineEdit)
   pointerTableAddressLineEditWidgetLayout.addWidget(lastPointerTableAddressLineEdit)
+
+  pointerTableAddressWidgetLayout.addWidget(pointerTableAddressLineEditTitle)
+  pointerTableAddressWidgetLayout.addWidget(pointerTableAddressLineEditWidget)
+
+  //Global offset--------------------------------------------------------
+
+
+  const gloalOffsetTitle = new QWidget();
+  const globalOffsetTitleLayout = new FlexLayout();
+  gloalOffsetTitle.setLayout(globalOffsetTitleLayout)
+
+
+  const globalOffsetLineEditAndButton = new QWidget() 
+  const globalOffsetLineEditAndButtonLayout = new FlexLayout();
+
+  globalOffsetLineEditAndButton.setLayout(globalOffsetLineEditAndButtonLayout)
   
+  createPointersDialogLayout.addWidget(gloalOffsetTitle)
+  
+
+  const globalOffsetTitleLabel = new QLabel()
+  globalOffsetTitleLabel.setText("Global Offset")
+  globalOffsetTitleLabel.setAlignment(132)
+  globalOffsetTitleLabel.setInlineStyle(`
+  width:238px;
+  border-color:black;
+  border-style:solid;
+  border-bottom-width:1px;
+  `)
+
+  globalOffsetTitleLayout.addWidget(globalOffsetTitleLabel)
+  globalOffsetTitleLayout.addWidget(globalOffsetLineEditAndButton)
+
+  const globalOffsetLineEdit = new QLineEdit();
+  globalOffsetLineEdit.setText("0")
+  globalOffsetLineEdit.setPlaceholderText("0")
+  globalOffsetLineEdit.setToolTip("Add a offset to the start of all Pointers Tables.\nUseful when a Index Pointer points out something that is not a pointer.")
+  globalOffsetLineEdit.setEnabled(false)
+  globalOffsetLineEdit.setInlineStyle(`
+  width:238px;
+  font-size:11px;
+  `)
+
+  const globalOfssetButton = new QCheckBox()
+  globalOffsetLineEditAndButtonLayout.addWidget(globalOfssetButton)
+  globalOffsetLineEditAndButtonLayout.addWidget(globalOffsetLineEdit)
+  globalOffsetLineEditAndButton.setInlineStyle(`
+  flex-direction:row;
+  `)
+  globalOfssetButton.addEventListener("clicked",function (){
+    
+    if(globalOfssetButton.isChecked()===true){
+      globalOffsetLineEdit.setEnabled(true)
+    }else{
+      globalOffsetLineEdit.setEnabled(false)
+    }
+  })
 
 
   //First Pointer of the first Table Address--------------------------------------------------------
 
-
   const firstPointerTitle = new QWidget();
-  const firstPointerLayout2 = new FlexLayout();
-  firstPointerTitle.setLayout(firstPointerLayout2)
-  createPointersDialogLayout.addWidget(firstPointerTitle)
+
+  const firstPointerTitleLayout = new FlexLayout();
+  firstPointerTitle.setLayout(firstPointerTitleLayout)
+  // createPointersDialogLayout.addWidget(firstPointerTitle)
 
   const firstPointerTitleLabel = new QLabel()
-  firstPointerTitleLabel.setText("First Pointer of the first Table Address *")
+  firstPointerTitleLabel.setText("1° Pointer address of the 1° Pointers Table *")
   firstPointerTitleLabel.setAlignment(132)
   firstPointerTitleLabel.setInlineStyle(`
+  width:238px;
   border-color:black;
   border-style:solid;
   border-bottom-width:1px;
   `)
 
-  firstPointerLayout2.addWidget(firstPointerTitleLabel)
-
-  const firstPointer = new QWidget();
-  const firstPointerLayout = new FlexLayout();
-  firstPointer.setLayout(firstPointerLayout)
-  createPointersDialogLayout.addWidget(firstPointer)
-  firstPointer.setInlineStyle(`
-  flex-direction:row;
-  `)
+  firstPointerTitleLayout.addWidget(firstPointerTitleLabel)
 
   const firstPointerAddressLineEdit2 = new QLineEdit();
-  firstPointerAddressLineEdit2.setPlaceholderText("First Pointer of the first Table Address")
-  firstPointerAddressLineEdit2.setToolTip("First string address in the file, for the section that you will translate (without 0x).")
-
+  firstPointerAddressLineEdit2.setPlaceholderText("1° Pointer of the 1° Pointers Table")
+  firstPointerAddressLineEdit2.setToolTip("First pointer address for the first Pointers Table (without 0x).\nIt will be found using the Pointers Table Index.")
+  firstPointerAddressLineEdit2.setEnabled(false)
   firstPointerAddressLineEdit2.setInlineStyle(`
   width:238px;
   font-size:11px;
   `)
 
-  firstPointerLayout.addWidget(firstPointerAddressLineEdit2)
+  firstPointerTitleLayout.addWidget(firstPointerAddressLineEdit2)
+  firstPointerTableAddressLineEdit.setText("0")
 
   //First String of the first Table Address--------------------------------------------------------
 
-
   const firstStringTitle = new QWidget();
-  const firstStringLayout2 = new FlexLayout();
-  firstStringTitle.setLayout(firstStringLayout2)
-  createPointersDialogLayout.addWidget(firstStringTitle)
+
+  const firstStringTitleLayout = new FlexLayout();
+  firstStringTitle.setLayout(firstStringTitleLayout)
+  // createPointersDialogLayout.addWidget(firstStringTitle)
 
   const firstStringTitleLabel = new QLabel()
-  firstStringTitleLabel.setText("First String of the first Table Address *")
+  firstStringTitleLabel.setText("1° String Address *")
   firstStringTitleLabel.setAlignment(132)
   firstStringTitleLabel.setInlineStyle(`
+  width:238px;
   border-color:black;
   border-style:solid;
   border-bottom-width:1px;
   `)
 
-  firstStringLayout2.addWidget(firstStringTitleLabel)
-
-  const firstString = new QWidget();
-  const firstStringLayout = new FlexLayout();
-  firstString.setLayout(firstStringLayout)
-  createPointersDialogLayout.addWidget(firstString)
-  firstString.setInlineStyle(`
-  flex-direction:row;
-  `)
+  firstStringTitleLayout.addWidget(firstStringTitleLabel)
 
   const firstStringAddressLineEdit2 = new QLineEdit();
-  firstStringAddressLineEdit2.setPlaceholderText("First String of the first Table Address")
-  firstStringAddressLineEdit2.setToolTip("First string address in the file, for the section that you will translate (without 0x).")
-
-
-
+  firstStringAddressLineEdit2.setPlaceholderText("1° String Address")
+  firstStringAddressLineEdit2.setToolTip("First string address in the file (without 0x).\nIt will be found using the Pointers Table Index.")
+  firstStringAddressLineEdit2.setEnabled(false)
   firstStringAddressLineEdit2.setInlineStyle(`
   width:238px;
   font-size:11px;
   `)
 
-  firstStringLayout.addWidget(firstStringAddressLineEdit2)
+  firstStringTitleLayout.addWidget(firstStringAddressLineEdit2)
+  //Post-last string of the last Pointers Table--------------------------------------------------------
 
+  const postLastStringTitle = new QWidget();
 
-  pointersTableSectionNameLineEdit.setText("Test")
-  firstPointerTableAddressLineEdit.setText("0")
-  lastPointerTableAddressLineEdit.setText("40")
-  firstPointerAddressLineEdit2.setText("48")
-  firstStringAddressLineEdit2.setText("78")
-    //Next Step Button--------------------------------------------------------
+  const postLastStringTitleLayout = new FlexLayout();
+  postLastStringTitle.setLayout(postLastStringTitleLayout)
+  createPointersDialogLayout.addWidget(postLastStringTitle)
+
+  const postLastStringTitleLabel = new QLabel()
+  postLastStringTitleLabel.setText("Post-last String Address *")
+  postLastStringTitleLabel.setAlignment(132)
+  postLastStringTitleLabel.setInlineStyle(`
+  width:238px;
+  border-color:black;
+  border-style:solid;
+  border-bottom-width:1px;
+  `)
+
+  postLastStringTitleLayout.addWidget(postLastStringTitleLabel)
+
+  const postLastStringAddressLineEdit = new QLineEdit();
+  postLastStringAddressLineEdit.setPlaceholderText("Post-last String Address")
+  postLastStringAddressLineEdit.setToolTip("Post-last String Address in the file (without 0x).\nIf there are nothing else after the last string\nuse the address of the last character.")
+  postLastStringAddressLineEdit.setEnabled(true)
+  postLastStringAddressLineEdit.setInlineStyle(`
+  width:238px;
+  font-size:11px;
+  `)
+
+  postLastStringTitleLayout.addWidget(postLastStringAddressLineEdit)
+
+  //Next Step Button--------------------------------------------------------
 
   const createPointersTableButton = new QPushButton()
 
   createPointersTableButton.setText("Next step")
   createPointersTableButton.addEventListener("clicked",function (){
 
-    if(firstStringAddressLineEdit2.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && firstPointerAddressLineEdit2.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && firstPointerTableAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
+    
+    if(firstPointerTableAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && lastPointerTableAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && pointersTableSectionNameLineEdit.text().match(/^[a-zA-Z0-9]+$/) !=null
+    && pointersTableSectionNameLineEdit.text().match(/^[a-zA-Z0-9 ]+$/) !=null
+    && globalOffsetLineEdit.text().match(/^[0-9]+$/)
+    && postLastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
+    && fs.existsSync(`${selectedFile}`) === true
     ){
       
     console.log("The hex format is correct!")
     }
     else{
-
-    errorMessageBox.setText("Not correct hex format,invalid file path or name, aborting...")
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("Not correct hex format, invalid file path, name or offset, aborting...")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
     return
@@ -2080,15 +3181,20 @@ function getPointersTableData(){
 
 
     const createPointersDialogStep2 = new QDialog()
-    createPointersDialogStep2.setWindowTitle('Create Pointers Table 2')
-    createPointersDialogStep2.setFixedSize(200,400)
+    createPointersDialogStep2.setModal(true)
+    win.addEventListener("Close", function (){
+
+      createPointersDialogStep2.close(true)
+    })
+
+    createPointersDialogStep2.setWindowTitle('Index Pointers Selector')
+    createPointersDialogStep2.setFixedSize(260,400)
     
     const createPointersDialogStep2Label = new QLabel()
-    createPointersDialogStep2Label.setText("Select the pointers of the Table")
+    createPointersDialogStep2Label.setText("Select the pointers of the Index\nTable")
     
     const createPointersDialogStep2Layout = new QBoxLayout(2)
     createPointersDialogStep2.setLayout(createPointersDialogStep2Layout)
-
 
     createPointersDialogStep2.show()
 
@@ -2098,12 +3204,98 @@ function getPointersTableData(){
     extractedTablePointersRaw = currentContent.slice(parseInt(firstPointerTableAddressLineEdit.text(),16),parseInt(lastPointerTableAddressLineEdit.text(),16))
 
     const pointersTableViewerlistWidget = new QListWidget()
+    const pointersTableViewerOptionsWidget = new QWidget()
+    const pointersTableViewerQButtonGroup = new QButtonGroup()
+    const pointersTableViewerOptionsCheckBoxesWidget = new QWidget()
+
+
+    const pointersTableViewerOption1CheckBox = new QRadioButton()
+    pointersTableViewerOption1CheckBox.setText("All")
+
+    const pointersTableViewerOption2CheckBox = new QRadioButton()
+    pointersTableViewerOption2CheckBox.setText("Odd")
+
+    const pointersTableViewerOption3CheckBox = new QRadioButton()
+    pointersTableViewerOption3CheckBox.setText("Even")
+
+    const pointersTableViewerOption4CheckBox = new QRadioButton()
+    pointersTableViewerOption4CheckBox.setText("None")
+
+    pointersTableViewerQButtonGroup.addEventListener("idClicked",function(){
+      if(pointersTableViewerQButtonGroup.checkedId() ===0){
+
+        for(i=0; i<=pointersTableViewerlistWidget.count()-1;i++){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(2)
+          }
+        }
+
+      }else if(pointersTableViewerQButtonGroup.checkedId() ===1){
+
+        for(i=0; i<=pointersTableViewerlistWidget.count()-1;i+=2){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(2)
+          }
+        }
+
+        for(i=1; i<=pointersTableViewerlistWidget.count()-1;i+=2){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(0)
+          }
+        }
+
+      }else if(pointersTableViewerQButtonGroup.checkedId() ===2){
+
+        for(i=1; i<=pointersTableViewerlistWidget.count()-1;i+=2){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(2)
+          }
+        }
+
+        for(i=0; i<=pointersTableViewerlistWidget.count()-1;i+=2){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(0)
+          }
+        }
+        
+      }else{
+        for(i=0; i<=pointersTableViewerlistWidget.count()-1;i++){
+          if(pointersTableViewerlistWidget.item(i).text()!="FFFFFFFF"){
+            pointersTableViewerlistWidget.item(i).setCheckState(0)
+          }
+        }
+      }
+    })
+
+    pointersTableViewerQButtonGroup.addButton(pointersTableViewerOption1CheckBox, 0)
+    pointersTableViewerQButtonGroup.addButton(pointersTableViewerOption2CheckBox, 1)
+    pointersTableViewerQButtonGroup.addButton(pointersTableViewerOption3CheckBox, 2)
+    pointersTableViewerQButtonGroup.addButton(pointersTableViewerOption4CheckBox, 3)
+
+    const pointersTableViewerOptionsTitleLabel = new QLabel()
+    pointersTableViewerOptionsTitleLabel.setText("Check:")
+    const pointersTableViewerOptionsWidgetLayout = new QBoxLayout(2)
+
+    const pointersTableViewerOptionsCheckBoxesWidgetLayout = new QBoxLayout(0)
+    pointersTableViewerOptionsCheckBoxesWidget.setLayout(pointersTableViewerOptionsCheckBoxesWidgetLayout)
+    pointersTableViewerOptionsCheckBoxesWidgetLayout.addWidget(pointersTableViewerOption1CheckBox)
+    pointersTableViewerOptionsCheckBoxesWidgetLayout.addWidget(pointersTableViewerOption2CheckBox)
+    pointersTableViewerOptionsCheckBoxesWidgetLayout.addWidget(pointersTableViewerOption3CheckBox)
+    pointersTableViewerOptionsCheckBoxesWidgetLayout.addWidget(pointersTableViewerOption4CheckBox)
+
     const step2Button = new QPushButton()
+ 
     step2Button.setText("Next")
 
+    pointersTableViewerOptionsWidget.setLayout(pointersTableViewerOptionsWidgetLayout)
+    pointersTableViewerOptionsWidgetLayout.addWidget(pointersTableViewerOptionsTitleLabel)
+    pointersTableViewerOptionsWidgetLayout.addWidget(pointersTableViewerOptionsCheckBoxesWidget)
+    pointersTableViewerOptionsWidgetLayout.addWidget(step2Button)
+    pointersTableViewerOptionsWidgetLayout.addWidget(createPointersDialogStep2Label)
+
     createPointersDialogStep2Layout.addWidget(pointersTableViewerlistWidget)
-    createPointersDialogStep2Layout.addWidget(step2Button)
-    createPointersDialogStep2Layout.addWidget(createPointersDialogStep2Label)
+    createPointersDialogStep2Layout.addWidget(pointersTableViewerOptionsWidget)
+
 
     while(Number(extractedTablePointersRaw.length)>1){
 
@@ -2118,7 +3310,7 @@ function getPointersTableData(){
       
       const extractedItem = new QListWidgetItem()
 
-      extractedItem.setText(`${extractedTablePointersIn4[i].toString("hex").toUpperCase()}`)
+      extractedItem.setText( `${extractedTablePointersIn4[i].toString("hex").toUpperCase()}`)
 
       extractedItem.setCheckState(0)
       pointersTableViewerlistWidget.addItem(extractedItem)
@@ -2133,6 +3325,7 @@ function getPointersTableData(){
     step2Button.addEventListener("clicked",function (){
 
       k = 0
+
       for(i=0; i!=pointersTableViewerlistWidget.count();i++){
 
         if(pointersTableViewerlistWidget.item(i).checkState()===2){
@@ -2142,8 +3335,16 @@ function getPointersTableData(){
         }
       }
 
+      if(selectedTablePointers.length===0){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! No Pointers selected, please select at least 1")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      return
+      }
+
       createPointersDialogStep2.close(true)
-     
+      globalOffset = Number(globalOffsetLineEdit.text())
       if(firstPointersTableAddressLineEdit.text()=== ""){
         win.setFixedSize(728, 544);
 
@@ -2154,104 +3355,111 @@ function getPointersTableData(){
         flex:1;
       `)
       }
-    
+
+      postLastStringAddress = postLastStringAddressLineEdit.text()
+
       firstPointersTableAddressLineEdit.setText(firstPointerTableAddressLineEdit.text())
       lastPointersTableAddressLineEdit.setText(lastPointerTableAddressLineEdit.text())
-      firstPointerAddressLineEdit.setText(firstPointerAddressLineEdit2.text())
-      lastPointerAddressLineEdit.setText(firstStringAddressLineEdit2.text())
-      firstStringAddressLineEdit.setText(firstStringAddressLineEdit2.text())
+      sectionNameLineEdit.setText(pointersTableSectionNameLineEdit.text())
 
-      // if(bigEndian.isChecked()===true){
-      //   lastStringAdressLineEdit.setText(Buffer.from(selectedTablePointers[1], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[1], "hex").length).toString(16))
-      // }else{
-      //   lastStringAdressLineEdit.setText(Buffer.from(selectedTablePointers[1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[1], "hex").length).toString(16))
-      // }
       createPointersTable(pointersTableSectionNameLineEdit.text())
+
     })
 
   })
+
   createPointersDialogLayout.addWidget(createPointersTableButton)
 
+  postLastStringAddressLineEdit.setText(((fs.readFileSync(`${selectedFile}`)).length-1).toString(16))
+  
+  //MH2 Preloaded Pointers Tables Configurations
+  if(pointersTableSectionNameLineEdit.text()==="armor"){
+    lastPointerTableAddressLineEdit.setText("40")
+  }else if(pointersTableSectionNameLineEdit.text()==="bar"){
+    lastPointerTableAddressLineEdit.setText("50")
+  }else if(pointersTableSectionNameLineEdit.text()==="bar2"){
+    lastPointerTableAddressLineEdit.setText("70")
+  }else if(pointersTableSectionNameLineEdit.text()==="bar3"){
+    lastPointerTableAddressLineEdit.setText("48")
+  }else if(pointersTableSectionNameLineEdit.text()==="cocot"){
+    lastPointerTableAddressLineEdit.setText("90")
+  }else if(pointersTableSectionNameLineEdit.text()==="mh01"){
+    lastPointerTableAddressLineEdit.setText("78")
+  }else if(pointersTableSectionNameLineEdit.text()==="mh02"){
+    lastPointerTableAddressLineEdit.setText("78")
+  }else if(pointersTableSectionNameLineEdit.text()==="mh03"){
+    lastPointerTableAddressLineEdit.setText("78")
+  }else if(pointersTableSectionNameLineEdit.text()==="mhc"){
+    lastPointerTableAddressLineEdit.setText("28")
+  }else if(pointersTableSectionNameLineEdit.text()==="monmae"){
+    lastPointerTableAddressLineEdit.setText("80")
+  }else if(pointersTableSectionNameLineEdit.text()==="square"){
+    lastPointerTableAddressLineEdit.setText("58")
+  }else if(pointersTableSectionNameLineEdit.text()==="tunnel"){
+    lastPointerTableAddressLineEdit.setText("08")
+  }
+
+  //MHP3rd Preloaded Pointers Tables Configurations
+  if(pointersTableSectionNameLineEdit.text()==="0017"&& fs.readFileSync(`${selectedFile}`)[parseInt("72BED",16)]===93){
+    lastPointerTableAddressLineEdit.setText("CC")
+    postLastStringAddressLineEdit.setText("72BED")
+  }else if(pointersTableSectionNameLineEdit.text()==="0017"&& fs.readFileSync(`${selectedFile}`)[parseInt("72F37",16)]===93){
+    lastPointerTableAddressLineEdit.setText("CC")
+    postLastStringAddressLineEdit.setText("72F37")
+  }else if(pointersTableSectionNameLineEdit.text()==="2813"){//nonHD
+    lastPointerTableAddressLineEdit.setText("0C")
+    postLastStringAddressLineEdit.setText("389A")
+  }else if(pointersTableSectionNameLineEdit.text()==="2836"){//HD
+    lastPointerTableAddressLineEdit.setText("0C")
+    postLastStringAddressLineEdit.setText("37B4")
+  }else if(pointersTableSectionNameLineEdit.text()==="2814"||pointersTableSectionNameLineEdit.text()==="2837"){
+    lastPointerTableAddressLineEdit.setText("0C")
+    postLastStringAddressLineEdit.setText("3014")
+  }else if(pointersTableSectionNameLineEdit.text()==="2815"||pointersTableSectionNameLineEdit.text()==="2838"){
+    lastPointerTableAddressLineEdit.setText("0C")
+    postLastStringAddressLineEdit.setText("25B42")
+  }else if(pointersTableSectionNameLineEdit.text()==="2816"){//nonHD
+    lastPointerTableAddressLineEdit.setText("24")
+    postLastStringAddressLineEdit.setText("23317")
+  }else if(pointersTableSectionNameLineEdit.text()==="2839"){//HD
+    lastPointerTableAddressLineEdit.setText("24")
+    postLastStringAddressLineEdit.setText("232F1")
+  }else if(pointersTableSectionNameLineEdit.text()==="2817"||pointersTableSectionNameLineEdit.text()==="2840"){
+    lastPointerTableAddressLineEdit.setText("10")
+    postLastStringAddressLineEdit.setText("5F6B0")
+  }else if(pointersTableSectionNameLineEdit.text()==="2818"||pointersTableSectionNameLineEdit.text()==="2841"){
+    lastPointerTableAddressLineEdit.setText("10")
+    postLastStringAddressLineEdit.setText("A913")
+  }else if(pointersTableSectionNameLineEdit.text()==="2819"||pointersTableSectionNameLineEdit.text()==="2842"){
+    lastPointerTableAddressLineEdit.setText("0C")
+    postLastStringAddressLineEdit.setText("2645")
+  }else if(pointersTableSectionNameLineEdit.text()==="4202"||pointersTableSectionNameLineEdit.text()==="4290"){
+    lastPointerTableAddressLineEdit.setText("88")
+    postLastStringAddressLineEdit.setText("25F3D")
+    globalOffsetLineEdit.setText("4")
+  }else if(pointersTableSectionNameLineEdit.text()==="4203"||pointersTableSectionNameLineEdit.text()==="4291"){
+    lastPointerTableAddressLineEdit.setText("40")
+    postLastStringAddressLineEdit.setText("117B7")
+    globalOffsetLineEdit.setText("4")
+  }else if(pointersTableSectionNameLineEdit.text()==="4204"||pointersTableSectionNameLineEdit.text()==="4292"){
+    lastPointerTableAddressLineEdit.setText("20")
+    postLastStringAddressLineEdit.setText("15B92")
+    globalOffsetLineEdit.setText("4")
+  }
+
   createPointersDialog.show()
+
 }
 
 async function createPointersTable(name){
 
-let i = 0
-let k = 0
-let organizedSectionsTempL
-let organizedSectionsTempR
-let organizedSectionsTemp = ""
-let thisIsAString = false
-let offset = 0
-let offsetTest
-
-tableStartPointerFileAddresses[0] = firstPointerAddressLineEdit.text()
+tableStartPointerFileAddresses[0] = (parseInt(firstPointerAddressLineEdit.text(),16)).toString(16)
 tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
-tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
+// tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
 
 getSectionedCurrentContent()
 getOrganizedSections()
 i=0
-
-//Offset test
-// if(bigEndian.isChecked()===true){
-//   offsetTest =currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k
-//   ,Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[0], "hex").length) +k+4)
-//   offsetTest = offsetTest.readUIntBE(0,4).toString(16)
-// }else{
-//   offsetTest =currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k
-//   ,Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[0], "hex").length) +k+4)
-//   offsetTest = offsetTest.readUIntLE(0,4).toString(16)
-// }
-
-// if(tableStartStringFileAddresses[i]===offsetTest){
-//   console.log("No offset")  
-// }else{
-
-// }
-
-
-
-// while(selectedTablePointers[i]!=undefined){
-//   thisIsAString = false
-//   organizedSectionsTemp = i+1
-//   k= 0
-
-//   while(thisIsAString != true){
-//     organizedSectionsTempL = currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k
-//     ,Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k+4).toString("hex")
-//     k=k+4
-//     organizedSectionsTempR = currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k
-//     ,Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length) +k+4).toString("hex")
-
-//     if(bigEndian.isChecked()===false){
-//       if(Buffer.from(organizedSectionsTempL, "hex").readUIntLE(0,Buffer.from(organizedSectionsTempL, "hex").length)
-//       -Buffer.from(organizedSectionsTempR, "hex").readUIntLE(0,Buffer.from(organizedSectionsTempR, "hex").length) <500){
-       
-//         organizedSectionsTemp = organizedSectionsTemp+"\n"+ organizedSectionsTempL
-      
-//       }else{
-
-//         organizedSections[i] = organizedSectionsTemp
-//         thisIsAString = true
-//       }
-//     }else{
-//       if(Buffer.from(organizedSectionsTempL, "hex").readUIntBE(0,Buffer.from(organizedSectionsTempL, "hex").length)
-//       -Buffer.from(organizedSectionsTempR, "hex").readUIntBE(0,Buffer.from(organizedSectionsTempR, "hex").length) <500){
-       
-//         organizedSectionsTemp = organizedSectionsTemp+"\n"+ organizedSectionsTempL
-      
-//       }else{
-
-//         organizedSections[i] = organizedSectionsTemp
-//         thisIsAString = true
-//       }
-//     }
-//   }
-//   i= i+1
-// }
-
 
 saveTableConfiguration(name)
 
@@ -2262,42 +3470,75 @@ loadPointersTable(`./Pointers Tables/${name + ".pt"}`)
 
 function loadPointersTable(pathToPTFile){
 
-
   if(pathToPTFile!=undefined){
 
     selectedPTFile = path.resolve(pathToPTFile).split(path.sep).join("/");
+    sectionNameLineEdit.setText(selectedPTFile.replace(/^.*[\\\/]/, "").replace(".pt",""))
   }else{
     const ptFileDialog = new QFileDialog()
+    let goBack = true
+
+    ptFileDialog.addEventListener("fileSelected",function(){
+
+      if(ptFileDialog.selectedFiles().length!=0&&
+        fs.lstatSync(ptFileDialog.selectedFiles()[0]).isDirectory()===false&&
+        path.extname(`${ptFileDialog.selectedFiles()[0].toLowerCase()}`)===".pt"){
+
+        
+        selectedPTFile = ptFileDialog.selectedFiles();
+        sectionNameLineEdit.setText(selectedPTFile[0].replace(/^.*[\\\/]/, "").replace(".pt",""))
+        goBack = false
+      }else{
+        return
+      }
+    })
+
     ptFileDialog.setFileMode(1)
     ptFileDialog.setWindowTitle("Choose a .pt file")
     ptFileDialog.setAcceptMode(1)
     ptFileDialog.setNameFilter("*.pt")
     ptFileDialog.exec();
 
-    if(ptFileDialog.selectedFiles().length!=0&&
-      fs.lstatSync(ptFileDialog.selectedFiles()[0]).isDirectory()===false&&
-      path.extname(`${ptFileDialog.selectedFiles()[0].toLowerCase()}`)===".pt"){
-  
-      selectedPTFile = ptFileDialog.selectedFiles();
-  
-    }else{
+    if(goBack===true){
       return
     }
   }
   setDefaultValues(3)
   currentTableContent = (fs.readFileSync(`${selectedPTFile}`)).toString()
  
-
-
   pointersTableModeSettingsArr = currentTableContent.split(`\n`)
   filePathQLineEditRead.setText(`${pointersTableModeSettingsArr[8]}`)
   selectedFile= pointersTableModeSettingsArr[8]
+
+  if(fs.existsSync(selectedFile)===false){
+    errorMessageBox.setWindowTitle("Error")
+    const selectedFileWraped = (selectedFile.match(/.{1,40}/g) || []).join("\n");
+
+    errorMessageBox.setText(`ERROR! The file in the following path:\n\n${selectedFileWraped}\n\ndoes not longer exist, select a new one.`)
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+
+    if(loadFile()===1){
+      loadConfiguration()
+      return
+    }
+  }
+
   start()
-
+  saveSettingsButton.setEnabled(false)
   saveSettingsButton2.setEnabled(false)
-  action.setText("Return to Default state")
-  pointersTableMode = true
+  mainMenuAction1.setText("Return to Default state")
+  mainMenuAction3.setEnabled(false)
+  
+  firstPointerAddressLineEdit.setReadOnly(true)
+  lastPointerAddressLineEdit.setReadOnly(true)
+  firstStringAddressLineEdit.setReadOnly(true)
+  lastStringAddressLineEdit.setReadOnly(true)
+  filePathQLineEditRead.setReadOnly(true)
 
+  sectionNameHeader = sectionNameLineEdit.text()
+
+  pointersTableMode = true
 
   if(firstPointersTableAddressLineEdit.text().length=== 0){
     win.setFixedSize(728, 544);
@@ -2323,21 +3564,23 @@ function loadPTConfiguration(){
     pointersTableModeSettingsArr[5] === '' ||
     pointersTableModeSettingsArr[8] === undefined ||
     pointersTableModeSettingsArr[8] === '' ||
-    pointersTableModeSettingsArr[11] === undefined ||
-    pointersTableModeSettingsArr[11] === '' ||
-    pointersTableModeSettingsArr[12] === undefined ||
-    pointersTableModeSettingsArr[12] === ''){
+    pointersTableModeSettingsArr[20] === undefined ||
+    pointersTableModeSettingsArr[20] === ''){
 
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("ERROR! Not valid data.\n")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()
   }
   else{
 
-    let i =11
+    let i =20
     let k =0
+  
     currentTableContent = (fs.readFileSync(`${selectedPTFile}`)).toString()
     pointersTableModeSettingsArr = currentTableContent.split(`\n`)
+    
+
 
     while(pointersTableModeSettingsArr[i]!=''){
 
@@ -2348,6 +3591,7 @@ function loadPTConfiguration(){
     i=i+1
 
     }
+
     i=i+4
     k=0
     while(selectedTablePointers.length!=k){
@@ -2358,20 +3602,22 @@ function loadPTConfiguration(){
       i=i+5
       k=k+1
     }
+    postLastStringAddress = tableEndStringFileAddresses[k-1]
+    globalOffset = Number(pointersTableModeSettingsArr[11])
 
     getSectionedCurrentContent()
     getOrganizedSections()
 
-  
-    sectionNameLineEdit.setText(pointersTableModeSettingsArr[1])
+    sectionNameLineEdit.setReadOnly(true)
 
     firstPointersTableAddressLineEdit.setText(pointersTableModeSettingsArr[4])
     lastPointersTableAddressLineEdit.setText(pointersTableModeSettingsArr[5])
-    firstPointerAddressLineEdit.setText(tableStartPointerFileAddresses[Number(sectionNameNumber.text())-1])
+    firstPointerAddressLineEdit.setText((parseInt(tableStartPointerFileAddresses[Number(sectionNameNumber.text())-1],16)+globalOffset).toString(16))
     lastPointerAddressLineEdit.setText(tableEndPointerStartStringFileAddresses[Number(sectionNameNumber.text())-1])
     firstStringAddressLineEdit.setText(tableEndPointerStartStringFileAddresses[Number(sectionNameNumber.text())-1])
     lastStringAddressLineEdit.setText(tableEndStringFileAddresses[Number(sectionNameNumber.text())-1])
     
+ 
     extractedTablePointersRaw = currentContent.slice(parseInt(firstPointersTableAddressLineEdit.text(),16),parseInt(lastPointersTableAddressLineEdit.text(),16))
     
     i=0
@@ -2396,36 +3642,55 @@ function loadPTConfiguration(){
 function getSectionedCurrentContent(){
   let i =0
   sectionedCurrentContent = []
+  
   while(selectedTablePointers.length>i){
 
+
     if(selectedTablePointers.length-1!=i){
-      
+      let firstPointerAddress1 
+      let firstPointerAddress2 
 
-      let firstPointerAddress1 =Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,4)
-      let firstPointerAddress2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,4)
-
-      sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
+      if(bigEndian.isChecked()===false){
+        firstPointerAddress1 = Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,4)
+        firstPointerAddress2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,4)
+  
+        sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
+  
+      }else{
+        firstPointerAddress1 = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,4)
+        firstPointerAddress2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,4)
+  
+        sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
+  
+      }
 
     }else{
       sectionedCurrentContent[i] = currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length),-1)
-  
+
       break
     }
   
     i=i+1
   }
+
 }
 
 function saveTableConfiguration(name){
 
-  if(organizedSections===[]||organizedSections===undefined){
+  if(organizedSections.length===0||organizedSections===undefined){
 return
   }
   
   if(name===undefined){
-    name=sectionNameLineEdit.text()
+    name = sectionNameLineEdit.text()
   }
- 
+
+let i = 0
+ while(selectedTablePointers[i]!= undefined){
+  selectedTablePointers[i] = selectedTablePointers[i].toUpperCase()
+  i=i+1
+ }
+
 fs.writeFile(`./Pointers Tables/${name + ".pt"}`,
 `TableName=
 ${name}
@@ -2437,16 +3702,29 @@ ${lastPointersTableAddressLineEdit.text()}
 FilePath=
 ${filePathQLineEditRead.text()}
 
+GlobalOffset=
+${globalOffset}
+
+PL1=
+0
+
+PL2=
+0
+
 SelectedPointers=
 ${selectedTablePointers.join(',').replace(/,/g, '\n').split()}
 
 Sections=
 
 ${organizedSections.join(',').replace(/,/g, '\n').split()}
-`,
+`,{
+  encoding: "binary",
+  flag: "w",
+  mode: 0o666
+},
   (err) => {
     if (err){
-  
+      errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("ERROR! The pointers table could not be created D:\n")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
@@ -2466,30 +3744,31 @@ function getOrganizedSections(){
     if(bigEndian.isChecked()===true){
       tableStartPointerFileAddresses[i] = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i], "hex").length).toString(16)
       
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0,4)).readUIntLE(0,4)
+      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset)).readUIntBE(0,4)
       tableEndPointerStartStringFileAddresses[i]= (offset+ parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
   
       if(selectedTablePointers[i+1]!=undefined){
         tableEndStringFileAddresses[i]= Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i+1], "hex").length).toString(16)
   
       }else{
-        tableEndStringFileAddresses[i]= (currentContent.length-1).toString(16)
+        tableEndStringFileAddresses[i]= postLastStringAddress
       }
     }else{
-      tableStartPointerFileAddresses[i] = Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length).toString(16)
       
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0,4)).readUIntLE(0,4)
-      tableEndPointerStartStringFileAddresses[i]= (offset+ parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
+      tableStartPointerFileAddresses[i] = (Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length)).toString(16)
+      
+      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset),"hex").readUIntLE(0,4)
+      tableEndPointerStartStringFileAddresses[i]= ( offset+parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
   
       if(selectedTablePointers[i+1]!=undefined){
-        tableEndStringFileAddresses[i]= Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length).toString(16)
+        tableEndStringFileAddresses[i]= (Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length)).toString(16)
   
       }else{
-        tableEndStringFileAddresses[i]= (currentContent.length-1).toString(16)
+        
+        tableEndStringFileAddresses[i]= postLastStringAddress
       }
-  
     }
-  
+
     organizedSections[i] =`${i+1}\n`+
     tableStartPointerFileAddresses[i].toUpperCase()+"\n"+
     tableEndPointerStartStringFileAddresses[i].toUpperCase()  +"\n"+
@@ -2500,12 +3779,21 @@ function getOrganizedSections(){
 }
 
 function removePointersTable(){
-
   saveSettingsButton.setEnabled(true)
   saveSettingsButton2.setEnabled(true)
+  sectionNameLineEdit.setReadOnly(false)
+  firstPointerAddressLineEdit.setReadOnly(false)
+  lastPointerAddressLineEdit.setReadOnly(false)
+  firstStringAddressLineEdit.setReadOnly(false)
+  lastStringAddressLineEdit.setReadOnly(false)
+  filePathQLineEditRead.setReadOnly(false)
   firstPointersTableAddressLineEdit.setText("")
   lastPointersTableAddressLineEdit.setText("")
-  action.setText("Load file")
+  
+  sectionDetailsLabel.setText(`Section name: String#N/A`)
+  mainMenuAction1.setText("Load file")
+  mainMenuAction3.setEnabled(true)
+  sectionNameHeader = "Section name"
   pointersTableMode = false
   
   rezisePointersTableLineEdit()
@@ -2519,6 +3807,7 @@ function removePointersTable(){
   flex:1;
   `)
   setDefaultValues(3)
+  loadConfiguration()
   start()
 }
 
@@ -2531,41 +3820,42 @@ function sleep(ms) {
 function pointersTableUpdater(){
   let i=0
   //For the pointers table mode.
-  if(pointersTableMode===true&&extractedStrings.length>extractedStringsOLD.length){
-    
-    let offset = extractedStrings.length-extractedStringsOLD.length
-    
+  if(extractedStrings.length>originalLenght){
+
+    stringsOffset = extractedStrings.length-originalLenght
     i=0
     while(selectedTablePointers[i]!=undefined){
       oldSelectedTablePointers[i] = selectedTablePointers[i]
       i=i+1
     }
-    console.log(offset)
+
     if(Number(sectionNameNumber.text())+1!= undefined){
       i= Number(sectionNameNumber.text())
     }else{
       return
     }
-  
+    
+    let temp1
+    let temp2
+    
     while(sectionedCurrentContent[i]!=undefined){
 
-      if(bigEndian.isChecked===true){
+      if(bigEndian.isChecked()===false){
 
-        selectedTablePointers[i] = Buffer.from(((Buffer.from(selectedTablePointers[i],"hex")).readUIntBE(0,4) +offset).toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0'))
-
+        temp1 = Buffer.from(selectedTablePointers[i],"hex").readUIntLE(0,4) + stringsOffset - stringsOldOffset
+        temp2 = temp1.toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0')
+        selectedTablePointers[i] = temp2.match(/.{1,2}/g).reverse().join('')
+      
       }else{
 
-        let temp1 = Buffer.from(selectedTablePointers[i],"hex").readUIntLE(0,4) + offset
-        let temp2 = temp1.toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0')
-        let temp3 = temp2.match(/.{1,2}/g).reverse().join('')
-   
-        selectedTablePointers[i] = Buffer.from(temp3,"hex")
-
+        temp1 = Buffer.from(selectedTablePointers[i],"hex").readUIntBE(0,4) + stringsOffset - stringsOldOffset
+        temp2 = temp1.toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0')
+        selectedTablePointers[i] = temp2.match(/.{1,2}/g).reverse().join('')
       }
 
     i=i+1
-
     }
+
     i =0
     let k =0
 
@@ -2575,10 +3865,9 @@ function pointersTableUpdater(){
         k=0
         while(extractedTablePointersIn4[k]!=undefined){
 
+          if(extractedTablePointersIn4[k].toString("hex").toUpperCase()===oldSelectedTablePointers[i].toUpperCase()){
 
-          if(extractedTablePointersIn4[k].toString("hex").toUpperCase()===oldSelectedTablePointers[i]){
-
-            extractedTablePointersIn4[k] = selectedTablePointers[i]
+            extractedTablePointersIn4[k] = Buffer.from(selectedTablePointers[i],"hex")
 
           }
           k=k+1
@@ -2587,7 +3876,14 @@ function pointersTableUpdater(){
       }
       i=i+1
     }
+  
     i =0
+    while(oldSelectedTablePointers[i]!=undefined){
+      oldSelectedTablePointers[i] = selectedTablePointers[i]
+      i=i+1
+    } 
+    i =0
+    
     while(selectedTablePointers[i]!=undefined){
 
       selectedTablePointers[i] = selectedTablePointers[i].toString("hex")
@@ -2602,45 +3898,323 @@ function pointersTableUpdater(){
 
     let tempExtractedTablePointers = extractedTablePointers.toString("binary")
 
-    lastStringAddressLineEdit.setText((parseInt(lastStringAddressLineEdit.text(),16)+offset).toString(16))
+    lastStringAddressLineEdit.setText((parseInt(lastStringAddressLineEdit.text(),16)+stringsOffset - stringsOldOffset).toString(16))
 
     tempCurrentContent =  tempCurrentContent.substring(0,parseInt(firstPointersTableAddressLineEdit.text(),16)) + tempExtractedTablePointers +tempCurrentContent.substring(parseInt(lastPointersTableAddressLineEdit.text(),16))
     currentContent = Buffer.from(tempCurrentContent,"binary")
   }
   getSectionedCurrentContent()
   getOrganizedSections()
+  stringsOldOffset = stringsOffset
 
-
-
-  saveTableConfiguration()
+  if(exportAllMode===false){
+    saveTableConfiguration()
+  }
 }
+
+function setShiftJISEncoding(){
+  if(encodingMenuAction2.isChecked()===true){
+    encodingMenuAction1.setChecked(false)
+    encodingMenuAction1.setEnabled(true)
+    encodingMenuAction2.setEnabled(false)
+    encodingMenu.setTitle("Encoding: Shift-JIS")
+    UTF8Encoding = false
+    shiftJISEncoding = true
+  }
+
+  if(listWidget.count()!=0 && extractedPointersIn4[0]!= undefined){
+    console.log("Changing encoding to Shift-JIS 1")
+    saveAndPrepare()
+  }else if(listWidget.count()!=0 && extractedPointersIn4[0]=== undefined){
+    console.log("Changing encoding to Shift-JIS 2")
+    saveAndPrepare2()
+  }
+}
+
+function setUTF8Encoding(){
+  if(encodingMenuAction1.isChecked()===true){
+    encodingMenuAction2.setChecked(false)
+    encodingMenuAction2.setEnabled(true)
+    encodingMenuAction1.setEnabled(false)
+    encodingMenu.setTitle("Encoding: UTF-8")
+    UTF8Encoding = true
+    shiftJISEncoding = false
+  }
+  if(listWidget.count()!=0 && extractedPointersIn4[0]!= undefined){
+    console.log("Changing encoding to UTF-8 1")
+    saveAndPrepare()
+  }else if(listWidget.count()!=0 && extractedPointersIn4[0]=== undefined){
+    console.log("Changing encoding to UTF-8 2")
+    saveAndPrepare2()
+  }
+}
+
+function setEUCJPEncoding(){
+
+}
+
+function setJISncoding(){
+
+}
+
+function setUTF16Encoding(){
+
+}
+
+function setUTF16BEEncoding(){
+
+}
+
+function setUTF16LEEncoding(){
+
+}
+
+function fileSize(options){
+  
+  if(options===0){
+
+    if(fileSizeMenuAction1.isChecked()===true){
+      fileSizeMenuAction2.setChecked(false)
+      fileSizeMenuAction2.setEnabled(true)
+      fileSizeMenuAction1.setEnabled(false)
+      fileSizeMenu.setTitle("File Size: Keep")
+    }
+  }else{
+
+    if(fileSizeMenuAction2.isChecked()===true){
+      fileSizeMenuAction1.setChecked(false)
+      fileSizeMenuAction1.setEnabled(true)
+      fileSizeMenuAction2.setEnabled(false)
+      fileSizeMenu.setTitle("File Size: Don't keep")
+    }
+  }
+}
+
+async function alignTwoCsv(){
+
+  let selectedCsv1 = csvSelection()
+
+  if(selectedCsv1===null){
+    return
+  }
+
+  let selectedCsv2 = csvSelection()
+
+  if(selectedCsv2===null){
+    return
+  }
+
+  let csvContentInHex1 = Buffer.from(fs.readFileSync(`${selectedCsv1}`).toString("hex").replace("efbbbf0d0a","").replace("efbbbf",""),"hex").toString("utf8")
+
+  let csvContentInHex2 = Buffer.from(fs.readFileSync(`${selectedCsv2}`).toString("hex").replace("efbbbf0d0a","").replace("efbbbf",""),"hex").toString("utf8")
+  
+  let csvContentInHex1Style
+  let csvContentInHex2Style
+
+  if(csvContentInHex1.split("\n\n").length>csvContentInHex1.split("\r\n\r\n").length&&csvContentInHex1.split("\n\n").length>csvContentInHex1.split("\r\n;\r\n").length){
+    csvContentInHex1 = csvContentInHex1.split("\n\n")
+    csvContentInHex1Style=0
+  }else if(csvContentInHex1.split("\r\n;\r\n").length>csvContentInHex1.split("\r\n\r\n").length&&csvContentInHex1.split("\r\n;\r\n").length>csvContentInHex1.split("\n\n").length){
+    csvContentInHex1 = csvContentInHex1.split("\r\n;\r\n")
+    csvContentInHex1Style=1
+  }else{
+    csvContentInHex1 = csvContentInHex1.split("\r\n\r\n")
+    csvContentInHex1Style=2
+  }
+
+  if(csvContentInHex2.split("\n\n").length>csvContentInHex2.split("\r\n\r\n").length&&csvContentInHex2.split("\n\n").length>csvContentInHex2.split("\r\n;\r\n").length){
+    csvContentInHex2 = csvContentInHex2.split("\n\n")
+    csvContentInHex2Style=0
+  }else if(csvContentInHex2.split("\r\n;\r\n").length>csvContentInHex2.split("\r\n\r\n").length&&csvContentInHex2.split("\r\n;\r\n").length>csvContentInHex2.split("\n\n").length){
+    csvContentInHex2 = csvContentInHex2.split("\r\n;\r\n")
+    csvContentInHex2Style=1
+  }else{
+    csvContentInHex2 = csvContentInHex2.split("\r\n\r\n")
+    csvContentInHex2Style=2
+  }
+
+  let i = 0 
+  while(csvContentInHex1[i]!=undefined){
+      csvContentInHex1[i] = checkForSemicolons(csvContentInHex1[i],csvContentInHex1Style)
+      i=i+1
+    }
+    i =0
+  while(csvContentInHex2[i]!=undefined){
+    csvContentInHex2[i] = checkForSemicolons(csvContentInHex2[i],csvContentInHex2Style)
+    i=i+1
+  }
+  i=0
+  let finalCsv = []
+  let tempCsvContent1
+  let tempCsvContent2 
+  while(csvContentInHex1[i]!=undefined || csvContentInHex2[i]!=undefined){
+
+    if(csvContentInHex1[i]===undefined){
+      csvContentInHex1[i] = ""
+    }
+
+    if(csvContentInHex2[i]===undefined){
+      csvContentInHex2[i] = ""
+    }
+
+    if(csvContentInHex1Style===0){
+      tempCsvContent1 = csvContentInHex1[i].split("\n")
+    }else if(csvContentInHex1Style===1){
+
+      if(csvContentInHex1[i].substring(0,3)===";\r\n"){
+        csvContentInHex1[i] = csvContentInHex1[i].replace(";\r\n","")
+      }
+      tempCsvContent1 = csvContentInHex1[i].split(";\r\n")
+      
+    }else{
+
+      if(csvContentInHex1[i].substring(0,2)==="\r\n"){
+        csvContentInHex1[i] = csvContentInHex1[i].replace("\r\n","")
+      }
+
+      tempCsvContent1 = csvContentInHex1[i].split("\r\n")
+    }
+
+    if(csvContentInHex2Style===0){
+      tempCsvContent2 = csvContentInHex2[i].split("\n")
+    }else if(csvContentInHex2Style===1){
+
+      if(csvContentInHex2[i].substring(0,3)===";\r\n"){
+        csvContentInHex2[i] = csvContentInHex2[i].replace(";\r\n","")
+      }
+      tempCsvContent2 = csvContentInHex2[i].split(";\r\n")
+
+    }else{
+
+      if(csvContentInHex2[i].substring(0,2)==="\r\n"){
+        csvContentInHex2[i] = csvContentInHex2[i].replace("\r\n","")
+      }
+      tempCsvContent2 = csvContentInHex2[i].split("\r\n")
+    }
+    
+    let tempCsvContent3 = []
+    let k = 0
+    while(tempCsvContent1[k]!=undefined||tempCsvContent2[k]!=undefined){
+
+      if(tempCsvContent1[k]===undefined){
+        tempCsvContent1[k] = ""
+      }else if(tempCsvContent2[k]===undefined){
+        tempCsvContent2[k] = ""
+      }
+
+      tempCsvContent3[k] = tempCsvContent1[k]+ ";" + tempCsvContent2[k] +"\n"
+
+      k=k+1
+    }
+    tempCsvContent3[k-1] = tempCsvContent3[k-1] + "\n"
+
+    if(Array.isArray(tempCsvContent3)===true){
+      finalCsv[i]  = tempCsvContent3.join("")
+    }else{
+      finalCsv[i]  = tempCsvContent3
+    }
+
+    i=i+1
+  }
+
+  fs.writeFile(`./mergedData.txt`,`${finalCsv.join("")}`,{
+    encoding: "utf8",
+    flag: "w",
+    mode: 0o666
+  },(err) => {
+
+    if (err){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("ERROR! maybe the file is being used?")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }
+    else{
+      errorMessageBox.setWindowTitle("Task completed")
+      errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }
+  })
+}
+
+
 
 //Toolbar and main Window--------------------------------------------------------
 const win = new QMainWindow;
 win.setFixedSize(728, 504);
 win.setWindowTitle('MH Pointers Tool');
 
-const action = new QAction();
-const action2 = new QAction();
-const action3= new QAction();
-const action4= new QAction();
-const action5= new QAction();
-action.setText('Load file');
-action2.setText("About");
-action3.setText('Exit');
-action4.setText('Load Pointers Table');
-action5.setText('Create Pointers Table for this file');
+const mainMenu = new QMenu()
 
-const menu = new QMenu()
-menu.setTitle("Menu")
-menu.addAction(action)
+const mainMenuAction1 = new QAction();
+const mainMenuAction2 = new QAction();
+const mainMenuAction3 = new QAction();
+const mainMenuAction4 = new QAction();
+const mainMenuAction5 = new QAction();
+const mainMenuAction6 = new QAction();
 
-menu.addAction(action2)
-menu.addAction(action3)
+mainMenu.setTitle("Menu")
+mainMenuAction1.setText('Load file');
+mainMenuAction2.setText('Load Pointers Table');
+mainMenuAction3.setText('Create a Pointers Table for this file');
+mainMenuAction4.setText('Align two csv by rows');
+mainMenuAction5.setText("About");
+mainMenuAction6.setText('Exit');
+
+mainMenu.addAction(mainMenuAction1)
+mainMenu.addAction(mainMenuAction2) 
+mainMenu.addAction(mainMenuAction3)
+mainMenu.addAction(mainMenuAction4)
+mainMenu.addAction(mainMenuAction5)
+mainMenu.addAction(mainMenuAction6)
+
+const encodingMenu = new QMenu()
+encodingMenu.setTitle("Encoding: UTF-8")
+const encodingMenuAction1 = new QAction();
+const encodingMenuAction2 = new QAction();
+
+//QActionGroup() Is not currently ported
+// const encodingMenuActionGroup  = QActionGroup()
+// encodingMenuActionGroup.addAction(encodingMenuAction1)
+// encodingMenuActionGroup.addAction(encodingMenuAction2)
+
+encodingMenuAction1.setText('UTF-8');
+encodingMenuAction2.setText('Shift-JIS');
+
+encodingMenuAction1.setCheckable(true);
+encodingMenuAction2.setCheckable(true)
+encodingMenuAction1.setChecked(true)
+encodingMenuAction1.setEnabled(false)
+
+const fileSizeMenu = new QMenu()
+// fileSizeMenu.setDisabled(true)
+fileSizeMenu.setTitle("File size: Keep")
+fileSizeMenu.setToolTip("Maintain the file size when a string is overwritten by a bigger one.\nBy default is keep.")
+const fileSizeMenuAction1 = new QAction();
+const fileSizeMenuAction2 = new QAction();
+
+fileSizeMenu.addAction(fileSizeMenuAction1) 
+fileSizeMenu.addAction(fileSizeMenuAction2)
+
+fileSizeMenuAction1.setText('Keep');
+fileSizeMenuAction1.setCheckable(true)
+fileSizeMenuAction1.setChecked(true)
+fileSizeMenuAction1.setEnabled(false)
+
+fileSizeMenuAction2.setText("Don't keep");
+fileSizeMenuAction2.setCheckable(true)
+
+encodingMenu.addAction(encodingMenuAction1) 
+encodingMenu.addAction(encodingMenuAction2)
 
 const menuBar = new QMenuBar()
-menuBar.addMenu(menu) 
+menuBar.addMenu(mainMenu) 
+menuBar.addMenu(encodingMenu) 
+menuBar.addMenu(fileSizeMenu)
+
 win.setMenuBar(menuBar);
+
 const qicon = new QIcon()
 qicon.addFile("./pngs/logo.png")
 win.setWindowIcon(qicon)
@@ -2652,22 +4226,35 @@ flex-direction: row;
 `)
 
 //load .pt
-action4.addEventListener("triggered",function (){
-
-  loadPointersTable()
-})
+mainMenuAction2.addEventListener("triggered",function (){loadPointersTable()})
 
 //create .pt
-action5.addEventListener("triggered",function () {getPointersTableData()})
-action5.setEnabled(false)
+mainMenuAction3.addEventListener("triggered",function () {getPointersTableData()})
+mainMenuAction3.setEnabled(false)
+
+//encoding
+encodingMenuAction1.addEventListener("triggered",function () {setUTF8Encoding()})
+encodingMenuAction2.addEventListener("triggered",function () {setShiftJISEncoding()})
+
+
+//file size
+fileSizeMenuAction1.addEventListener("triggered",function () {fileSize(0)})
+fileSizeMenuAction2.addEventListener("triggered",function () {fileSize(1)})
+
+//Align two csv by rows----------------------------------------------------------
+
+mainMenuAction4.addEventListener("triggered", function (){
+  alignTwoCsv()
+})
+
 //About----------------------------------------------------------
 const aboutDialog = new QDialog()
-
+aboutDialog.setModal(true)
 aboutDialog.setWindowTitle('About')
 aboutDialog.setInlineStyle(`
 background-color:white;
 `)
-action2.addEventListener("triggered",function (){
+mainMenuAction5.addEventListener("triggered",function (){
   aboutDialog.exec()
 })
 
@@ -2698,7 +4285,7 @@ aboutDialogLayout.addWidget(aboutMadeByWidget)
 
 const aboutTitleLabel = new QLabel()
 aboutTitleLabel.setTextInteractionFlags(1)
-aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.0.1")
+aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.1.0")
 const aboutTitleLayout = new QBoxLayout(0)
 aboutTitleLayout.addWidget(aboutTitleLabel)
 aboutTitleWidget.setLayout(aboutTitleLayout)
@@ -2771,7 +4358,7 @@ searchStringArea.setLayout(searchStringLayout)
 const searchLineEdit = new QLineEdit();
 searchLineEdit.setPlaceholderText("Search...")
 searchStringLayout.addWidget(searchLineEdit)
-searchLineEdit.setToolTip("Search for words or tentences in the list of strings.")
+searchLineEdit.setToolTip("Search for words or sentences in the list of strings.\nSometimes need to delete a letter of the sentence\nthat you are searching to work, will be fixed later.")
 
 const searchButtont = new QPushButton();
 searchButtont.setText("Next")
@@ -2820,8 +4407,10 @@ listWidget.addEventListener("clicked",() => {
   stringEditorTextEdit.setPlainText(listWidget.currentItem().text())
 
   if(sectionNameHeader != "Section name"){
+
     sectionDetailsLabel.setText(`${sectionNameHeader}: String#${listWidget.currentRow()+1}`)
   }else{
+
     sectionDetailsLabel.setText(`Section name: String#${listWidget.currentRow()+1}`)
   }
 
@@ -3078,8 +4667,8 @@ const sectionNameDownButton = new QPushButton();
 sectionNameDownButton.setText("↓")
 sectionNameLayout.addWidget(sectionNameDownButton)
 const sectionNameNumber = new QLabel();
+
 sectionNameNumber.setText("1 ")
-sectionNameNumber
 sectionNameNumber.setInlineStyle(`
 margin-left:2px;
 font-weight:bold;
@@ -3132,8 +4721,8 @@ function rezisePointersTableLineEdit() {
 
 const firstPointersTableAddressLineEdit = new QLineEdit();
 const lastPointersTableAddressLineEdit = new QLineEdit();
-firstPointersTableAddressLineEdit.setEnabled(false)
-lastPointersTableAddressLineEdit.setEnabled(false)
+firstPointersTableAddressLineEdit.setReadOnly(true)
+lastPointersTableAddressLineEdit.setReadOnly(true)
 firstPointersTableAddressLineEdit.setToolTip("First pointer table address in the file, for the section that you will translate (without 0x).")
 firstPointersTableAddressLineEdit.setPlaceholderText("First pointer table address")
 lastPointersTableAddressLineEdit.setPlaceholderText("Post-last pointer table address")
@@ -3498,9 +5087,6 @@ pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
       phase=1;
       oldSelectedString = i;
       
-
-      
-      
       const tempItem = new QListWidgetItem()
       tempItem.setText(pointersViewerlistWidget.item(i).text())
       pointersViewerForSharedPointersListWidget.addItem(tempItem)
@@ -3589,14 +5175,14 @@ rightWidgetLayout.addWidget(csvTranslator)
 const csvButton = new QPushButton();
 csvButton.setText("Translate strings using a .csv")
 csvTranslatorLayout.addWidget(csvButton)
-csvButton.setToolTip("Use a .csv with semicolons to translate a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.")
-csvButton.addEventListener("clicked",csvTranslation)
+csvButton.setToolTip("Use a .csv with semicolons to translate a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.\nMatch only the complete string.")
+csvButton.addEventListener("clicked",function (){csvTranslation()})
 csvButton.setEnabled(false)
 
 const csvButton2 = new QPushButton();
 csvButton2.setText("Translate strings partially using a .csv")
 csvTranslatorLayout.addWidget(csvButton2)
-csvButton2.setToolTip("Use a .csv with semicolons to translate/change words or phrases in a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.")
+csvButton2.setToolTip("Use a .csv with semicolons to translate a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.\nMatch words or phrases inside a string.")
 csvButton2.addEventListener("clicked",function (){csvTranslation(1)})
 csvButton2.setEnabled(false)
 
@@ -3610,13 +5196,13 @@ const exportAllButton = new QPushButton();
 exportAllButton.setText("Export all the data to a .csv")
 exportAllDataLayout.addWidget(exportAllButton)
 exportAllButton.setToolTip("Export all the data found in the file into a comfy .csv\nData sorting is up to you.")
-exportAllButton.addEventListener("clicked",exportAll)
+exportAllButton.addEventListener("clicked",function() {exportAllSelection()})
 exportAllButton.setEnabled(false)
 
 //RWA: MHG Wii Pointer Button--------------------------------------------
 const bigEndian = new QCheckBox()
 bigEndian.setText("Big Endian (MHTri/G on Wii)")
-bigEndian.setToolTip("Changes the pointers used to Big Endian")
+bigEndian.setToolTip("Changes the pointers used to Big Endian.")
 
 
 const bottomRightSquare = new QWidget()
@@ -3633,7 +5219,7 @@ flex-direction:row;
 const fastButton = new QCheckBox();
 
 fastButton.setText("Fast")
-fastButton.setToolTip("Do not display a pop-up when .csv translation found a match.")
+fastButton.setToolTip("Do not display a pop-up when .csv translation found a match.\nIf there are a lot of strings to be translated don't enable this option.")
 fastButton.setEnabled(true)
 bottomRightSquareLayout.addWidget(fastButton)
 
@@ -3677,11 +5263,14 @@ autoCharaAdjust.setEnabled(false)
 const fileDialog = new QFileDialog();
 let errorMessageBox = new QMessageBox()
 let errorMessageButton = new QPushButton()
+errorMessageButton.setInlineStyle(`
+
+`)
 errorMessageBox.addButton(errorMessageButton)
 
 fileDialog.setFileMode(0)
 
-action.addEventListener('triggered', function () {
+mainMenuAction1.addEventListener('triggered', function () {
   
   if(pointersTableMode===true){
     removePointersTable()
@@ -3691,7 +5280,7 @@ action.addEventListener('triggered', function () {
 
 })
 
-action3.addEventListener('triggered', function (){
+mainMenuAction6.addEventListener('triggered', function (){
   let exit = new QApplication()
   exit.exit(0)
 })
@@ -3705,7 +5294,7 @@ if( fs.existsSync(`./settings.cfg`) === false){
 fs.writeFile(`./settings.cfg`,`${Buffer.from("310d0a0d0a0d0a0d0a0d0a0d0a5b53504c49545d0d0a32", "hex")}`,
 (err) => {
   if (err){
-
+    errorMessageBox.setWindowTitle("Error")
     errorMessageBox.setText("ERROR! settings.cfg could not be created D:\n")
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.exec()

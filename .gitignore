@@ -16,3 +16,6 @@ src/.vscode
 
 # Ignore vsc files
 Pointers Tables
+
+# Ignore settings files
+settings
