@@ -85,11 +85,15 @@ let stringsOffset = 0
 let stringsOldOffset = 0
 let shiftJISEncoding = false
 let UTF8Encoding = true
-let originalLenght = 0
+let originalExtractedStringsLength = 0
 let globalOffset = 0
 let stopExport = false
 let skipExport = false
 let postLastStringAddress
+let globalExtractedStrings = []
+let globalAddressOfEachString = []
+let oldcurrentContentLength
+let timer
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -463,7 +467,7 @@ function saveAndPrepare(tableMode){
   }
 
   extractedStringsOLD = Buffer.concat(rawStrings)
-  originalLenght= extractedStringsOLD.length
+  originalExtractedStringsLength= extractedStringsOLD.length
 
   stringAddressFunc(currentContent)
   spaceLeftFunc(extractedStrings)
@@ -623,8 +627,8 @@ function saveAndPrepare2(){
   }
 
   extractedStringsOLD = Buffer.concat(rawStrings)
-  originalLenght= extractedStringsOLD.length
-  stringAddressFuncWithoutPointers(currentContent)
+  originalExtractedStringsLength= extractedStringsOLD.length
+  stringAddressFuncWithoutPointers(currentContent,string1AddressDecimal,string2AddressDecimal)
   spaceLeftFunc(extractedStrings)
   saveConfiguration()
 }
@@ -632,7 +636,7 @@ function saveAndPrepare2(){
 //Gather all the info to know the offset of each string in the file and in the memory 
 //(the memory one is accurate only if the console uses pointers based in the total lenght of data in the RAM)
 //data = currentContent, basically, the file.
-function stringAddressFunc(data){
+function stringAddressFunc(data,start,end){
 
   let i = string1AddressDecimal;
   let phase = 0;
@@ -763,15 +767,16 @@ function stringAddressFunc(data){
 }
 
 //Similar to stringAddressFunc()
-function stringAddressFuncWithoutPointers(data){
+function stringAddressFuncWithoutPointers(data,start,end){
+  let i = start;
 
-  let i = string1AddressDecimal;
   let phase = 0;
   let k = 0;
+  addressOfEachString = []
 
   //Analyze all the string indexes from currentContent
   //Saves the address/string index of each string start
-  while(i != string2AddressDecimal){
+  while(i != end){
 
     if(data[i] != 0 && phase === 0){
 
@@ -783,25 +788,50 @@ function stringAddressFuncWithoutPointers(data){
 
       phase = 0
     }
-
     i=i+1;
   }
+  return addressOfEachString
 }
 
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
 //are in the specified offset.
 function spaceLeftFunc(data){
   numSpaceLeft = 0
-  let i = 0;
-  while(data[i] != undefined){
+  let i = 0
 
-    if(data[i] === 0){
-      numSpaceLeft= numSpaceLeft+1
+  if(pointersTableMode===false){
+
+    while(data[i] != undefined){
+  
+      if(data[i] === 0){
+        numSpaceLeft= numSpaceLeft+1
+      }
+      i=i+1
     }
-    i=i+1
+
+    numSpaceLeft = numSpaceLeft -addressOfEachString.length
+    spaceLeftLabel.setText(`Space left: ${numSpaceLeft+1}`)
+  }else if(pointersTableMode===true){
+    let k = 0;
+    while(globalExtractedStrings[k]!=undefined){
+      i=0
+      while(globalExtractedStrings[k][i] != undefined){
+  
+        if(globalExtractedStrings[k][i] === 0){
+          numSpaceLeft= numSpaceLeft+1
+        }
+        i=i+1
+      }
+      k=k+1;
+    }
+    i=0
+    while(globalAddressOfEachString[i]!=undefined){
+      numSpaceLeft = numSpaceLeft -globalAddressOfEachString[i].length
+      i=i+1
+    }
+    spaceLeftLabel.setText(`Global Space Left: ${numSpaceLeft+1}`)
   }
-  numSpaceLeft = numSpaceLeft -addressOfEachString.length
-  spaceLeftLabel.setText(`Space left: ${numSpaceLeft+1}`)
+  
 }
 
 //Saves the address of each pointer to be used later.
@@ -935,7 +965,7 @@ function saveProgress(options,replacement){
     while(rawStrings[listWidget.currentRow()].length<savedString.length){
   
       rawStrings[listWidget.currentRow()] = Buffer.concat([rawStrings[listWidget.currentRow()],newBuffer])
-      
+      // console.log("Adding 00 to rawString nro" + ` ${listWidget.currentRow()}` +` ${rawStrings[listWidget.currentRow()].length-savedString.length}`)
     }
   }
 
@@ -944,11 +974,12 @@ function saveProgress(options,replacement){
   }
   
     rawStrings[listWidget.currentRow()] = savedString
-    if(extractedStrings.length>extractedStringsOLD.length){
-      console.log("AAAAAAA")
-      extractedStringsOLD = Buffer.concat(rawStrings)
-    }
     extractedStrings = Buffer.concat(rawStrings)
+  if(extractedStrings.length>extractedStringsOLD.length){
+    extractedStringsOLD = Buffer.concat(rawStrings)
+    // console.log("Updating extractedStringsOLD")
+  }
+
 
   if(pointer1AddressDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>oldRawString.length){
@@ -969,9 +1000,9 @@ function saveProgress(options,replacement){
   }else{
 
     if(pointersTableMode===false){
-      while(extractedStrings.length>originalLenght){
+      while(extractedStrings.length>originalExtractedStringsLength){
         extractedStrings = extractedStrings.slice(0,-1)
-        if(extractedStrings.length===originalLenght){
+        if(extractedStrings.length===originalExtractedStringsLength){
           extractedStrings = extractedStrings.slice(0,-1)
           extractedStrings = Buffer.concat([extractedStrings,newBuffer])
         }
@@ -979,7 +1010,6 @@ function saveProgress(options,replacement){
     }
   }
   i = 1
-
 
 
 // This while is a debug feature, if for some reason there are two raw pointers
@@ -1044,6 +1074,7 @@ function saveProgress(options,replacement){
   while(extractedStrings.length<extractedStringsOLD.length){
 
     extractedStrings = Buffer.concat([extractedStrings,newBuffer])
+    // console.log("Adding 00 to extractedStrings" + ` ${String(extractedStrings.length-extractedStringsOLD.length)}`)
   }
 
   let tempCurrentContent = currentContent.toString("binary")
@@ -1051,10 +1082,21 @@ function saveProgress(options,replacement){
   string2AddressDecimal= parseInt(lastStringAddressLineEdit.text(),16)
 
   tempCurrentContent = tempCurrentContent.substring(0,string1AddressDecimal) + tempExtractedStrings  + tempCurrentContent.substring(string2AddressDecimal)
-  
- 
+
+  oldcurrentContentLength = currentContent.length
   currentContent = Buffer.from(tempCurrentContent, "binary")
-  if(pointer1AddressDecimal=== ""){
+
+  if(pointersTableMode===true &&currentContent.length>oldcurrentContentLength&&fileSizeMenuAction1.isChecked()===true){
+    let howMuchToCut = currentContent.length-oldcurrentContentLength
+    let currentContentBufferArr = []
+    currentContentBufferArr[0] = currentContent.subarray(0,parseInt(postLastStringAddress,16)-1)
+    currentContentBufferArr[1] = newBuffer
+    currentContentBufferArr[2] = currentContent.subarray(parseInt(postLastStringAddress,16)+howMuchToCut)
+    currentContent = Buffer.concat(currentContentBufferArr)
+
+  }
+
+  if(pointer1AddressDecimal=== ""&&pointersTableMode===false){
 
   spaceLeftFunc(extractedStrings)
 
@@ -1068,9 +1110,10 @@ function saveProgress(options,replacement){
 
   if(pointersTableMode===true){
     pointersTableUpdater()
+    spaceLeftFunc(extractedStrings)
   }
 
-  fs.writeFile(`${selectedFile}`,currentContent,{
+  fs.writeFileSync(`${selectedFile}`,currentContent,{
     encoding: "binary",
     flag: "w",
     mode: 0o666
@@ -1494,15 +1537,7 @@ function csvSelection(){
   return selectedCsv
 }
 
-//Organize the data from the csv given by the user, saving them in
-//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
-function csvTranslation(options){
-
-  let selectedCsv = csvSelection()
-
-  if(selectedCsv===null){
-    return
-  }
+function csvTranslationPhase2(selectedCsv,options){
 
   let csvContent = fs.readFileSync(`${selectedCsv}`);
 
@@ -1755,7 +1790,71 @@ function csvTranslation(options){
     return
   }
   csvTranslationMode = true
+
 foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options)
+}
+
+//Organize the data from the csv given by the user, saving them in
+//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
+function csvTranslation(options){
+
+  const csvTranslationDialog = new QDialog()
+  const csvTranslationRow = new QWidget()
+
+  const csvTranslationDialogLayout = new QBoxLayout(2)
+  const csvTranslationRowLayout = new QBoxLayout(0)
+
+  csvTranslationRow.setLayout(csvTranslationRowLayout)
+  csvTranslationDialog.setFixedSize(300,80)
+
+  csvTranslationDialog.setLayout(csvTranslationDialogLayout)
+  csvTranslationDialog.setModal(true)
+
+  csvTranslationDialogLayout.addWidget(csvTranslationRow)
+
+  csvTranslationDialog.setWindowTitle("Select one translation option")
+
+  const csvTranslationForThisSection = new QPushButton()
+  const csvTranslationForThisPT = new QPushButton()
+
+  csvTranslationForThisSection.setText("Strings in this section")
+  csvTranslationForThisPT.setText("Strings from .pt file")
+
+  csvTranslationRowLayout.addWidget(csvTranslationForThisSection)
+  csvTranslationRowLayout.addWidget(csvTranslationForThisPT)
+
+  csvTranslationForThisSection.addEventListener("clicked", function(){
+    csvTranslationDialog.close()
+    let selectedCsv = csvSelection()
+
+    if(selectedCsv===null){
+      return
+    }
+    
+    csvTranslationPhase2(selectedCsv,options)
+  })
+
+  csvTranslationForThisPT.addEventListener("clicked", function(){
+    csvTranslationDialog.close()
+    let selectedCsv = csvSelection()
+
+    if(selectedCsv===null){
+      return
+    }
+    goToStart()
+    let k =0
+
+    while(k!=sectionedCurrentContent.length){
+      
+      csvTranslationPhase2(selectedCsv,options)
+
+      plus1(pointersTableMode)
+
+      k=k+1
+    }
+  })
+
+  csvTranslationDialog.exec()
 }
 
 function sleep(ms) {
@@ -1763,6 +1862,15 @@ function sleep(ms) {
     setTimeout(resolve, ms);
   });
 }
+
+const tests2 = new QDialog()
+const tests2Q = new QLineEdit()
+const testsFB = new FlexLayout()
+tests2.setLayout(testsFB)
+testsFB.addWidget(tests2Q)
+tests2.setWindowTitle("Test")
+tests2.setFixedSize(200,200)
+
 
 //Uses the data from  and stringToSearchInShiftJisBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
@@ -1772,7 +1880,7 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
   let lastCsvTranslationLogReplacement = []
   let lastCsvTranslationLogReplacementClean = []
 
-  let i =0;
+  let i = 0;
   let k = 0;
   if(options===1){
 
@@ -1828,18 +1936,16 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
           && searchStrings[k].toString("hex") != ""
           && rawStrings[i].toString("hex")===tempSearchString.replaceAll("0a200a","0a0a")){
         
-  
             if(fastButton.isChecked()===true){
 
             }else{
-
+          
               errorMessageBox.setWindowTitle("Task in progress, please wait")
-              errorMessageBox.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-              errorMessageButton.setText("                                                Ok                                              ")
-              errorMessageBox.show()
-              await sleep(150);
+              tests2Q.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+              tests2.show()
+              await sleep(350);
+              tests2.close()
             }
-
 
           lastCsvTranslationLogReplacement[k]= replaceStrings[k].toString("utf8").replace(/\x00\x00/g,"[CHECK]")
           lastCsvTranslationLogReplacementClean[k] = replaceStrings[k].toString("utf8").replace(/\x00/g,"")
@@ -2083,7 +2189,7 @@ function exportOnlyStringsOfSection(dataToExport,addFileName){
   }
   while (rawStrings[i]!= undefined ){
   
-    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
     
     i=i+1
   }
@@ -2099,7 +2205,7 @@ function exportStringsAndAddressOfSection(dataToExport,addFileName){
   let i = 0
   while (rawStrings[i]!= undefined ){
   
-    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
     
     dataToExport = dataToExport + ";"
 
@@ -2131,7 +2237,7 @@ function exportStringsFromAllSections(dataToExport,options,addFileName){
 
     while (rawStrings[i]!= undefined &&skipExport===false){
 
-      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
       
       i=i+1
     }
@@ -2172,7 +2278,7 @@ function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName
       while (rawStrings[i]!= undefined &&skipExport===false){
 
 
-        dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+        dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
       
         dataToExport[l] = dataToExport[l] + ";"
 
@@ -2212,7 +2318,7 @@ function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
     }
     while (rawStrings[i]!= undefined&&skipExport===false){
 
-      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
       dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
       dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
       dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
@@ -2265,7 +2371,7 @@ function checkForSemicolons(listWidgetString,style){
     }
   }
 
-  if(listWidgetString.includes("-")===true){
+  if(listWidgetString.includes("-")===true||listWidgetString.includes("+")===true){
 
     i =0
 
@@ -2279,7 +2385,7 @@ function checkForSemicolons(listWidgetString,style){
 
     while(listWidgetString[i]!=undefined){
 
-      if(listWidgetString[i][0]==="-"){
+      if(listWidgetString[i][0]==="-"||listWidgetString[i][0]==="+"){
         
         listWidgetString[i] = ` ${listWidgetString[i]}`
 
@@ -2322,15 +2428,12 @@ function checkForBlankSpaces(listWidgetString){
 
     listWidgetString = listWidgetString.replaceAll("\n\n","\n \n")
   }
-  
-  if(listWidgetString.includes("Please select a type of Pickaxe")){
-    console.log("break point")
-  }
 
   if(listWidgetString[0]==="\n"){
     listWidgetString  = ` ` +listWidgetString
   }
 
+  
   if(listWidgetString[listWidgetString.length-1]==="\n"){
     listWidgetString  = listWidgetString + ` `
   }
@@ -2377,7 +2480,7 @@ let dataToExportFinal = []
         }
         while (rawStrings[i]!= undefined){
   
-          dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+          dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
           dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
           dataToExport = dataToExport + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
           dataToExport = dataToExport + addressOfEachPointer[i] + `\n\n`+ ";;;;"
@@ -2407,7 +2510,7 @@ let dataToExportFinal = []
         dataToExport = exportStringsAndMoreFromAllSections(dataToExport,options,addFileName)
       }
     }
-    //Table Mode ON
+    //Pointers Table Mode ON
   }else if(pointersTableMode===true){
     exportAllMode =true
     dataToExport = []
@@ -2428,7 +2531,7 @@ let dataToExportFinal = []
         while (rawStrings[i]!= undefined ){
     
     
-          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
           dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
           dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
           dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
@@ -2466,7 +2569,7 @@ let dataToExportFinal = []
         while (rawStrings[i]!= undefined ){
     
     
-          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
             
           i=i+1
         }
@@ -2522,7 +2625,7 @@ let dataToExportFinal = []
 
           while (rawStrings[i]!= undefined ){
 
-            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n`
+            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
               
             i=i+1
           }
@@ -2583,7 +2686,7 @@ let dataToExportFinal = []
             i= 0
           while (rawStrings[i]!= undefined ){
       
-            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0).toString("hex").replaceAll("00","") + `\n\n` + ";"
+            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
             dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
             dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
             dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
@@ -3458,7 +3561,11 @@ tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
 // tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
 
 getSectionedCurrentContent()
-getOrganizedSections()
+if(getOrganizedSections()===1){
+  removePointersTable()
+  return
+}
+getGlobalExtractedStrings()
 i=0
 
 saveTableConfiguration(name)
@@ -3529,7 +3636,8 @@ function loadPointersTable(pathToPTFile){
   saveSettingsButton2.setEnabled(false)
   mainMenuAction1.setText("Return to Default state")
   mainMenuAction3.setEnabled(false)
-  
+  fileSizeMenu.setEnabled(true)
+
   firstPointerAddressLineEdit.setReadOnly(true)
   lastPointerAddressLineEdit.setReadOnly(true)
   firstStringAddressLineEdit.setReadOnly(true)
@@ -3606,7 +3714,11 @@ function loadPTConfiguration(){
     globalOffset = Number(pointersTableModeSettingsArr[11])
 
     getSectionedCurrentContent()
-    getOrganizedSections()
+    if(getOrganizedSections()===1){
+      removePointersTable()
+      return
+    }
+    getGlobalExtractedStrings()
 
     sectionNameLineEdit.setReadOnly(true)
 
@@ -3691,7 +3803,7 @@ let i = 0
   i=i+1
  }
 
-fs.writeFile(`./Pointers Tables/${name + ".pt"}`,
+fs.writeFileSync(`./Pointers Tables/${name + ".pt"}`,
 `TableName=
 ${name}
 
@@ -3773,9 +3885,31 @@ function getOrganizedSections(){
     tableStartPointerFileAddresses[i].toUpperCase()+"\n"+
     tableEndPointerStartStringFileAddresses[i].toUpperCase()  +"\n"+
     tableEndStringFileAddresses[i].toUpperCase()  +"\n"
-  
+
+    if(currentContent[parseInt(tableEndPointerStartStringFileAddresses[i],16)]===undefined){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return 1
+    }
+
     i=i+1;
   }
+}
+
+function getGlobalExtractedStrings(){
+  
+  let i =0
+  let oldAddresses = addressOfEachString
+  while(tableEndPointerStartStringFileAddresses[i]!=undefined){
+
+    globalExtractedStrings[i] = currentContent.slice(parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
+    globalAddressOfEachString[i] = stringAddressFuncWithoutPointers(currentContent,parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
+
+    i =i+1
+  }
+  addressOfEachString = oldAddresses
 }
 
 function removePointersTable(){
@@ -3793,6 +3927,11 @@ function removePointersTable(){
   sectionDetailsLabel.setText(`Section name: String#N/A`)
   mainMenuAction1.setText("Load file")
   mainMenuAction3.setEnabled(true)
+  fileSizeMenu.setEnabled(false)
+  fileSizeMenuAction1.setChecked(true)
+  fileSizeMenuAction2.setChecked(false)
+  globalExtractedStrings = []
+
   sectionNameHeader = "Section name"
   pointersTableMode = false
   
@@ -3820,9 +3959,9 @@ function sleep(ms) {
 function pointersTableUpdater(){
   let i=0
   //For the pointers table mode.
-  if(extractedStrings.length>originalLenght){
+  if(extractedStrings.length>originalExtractedStringsLength){
 
-    stringsOffset = extractedStrings.length-originalLenght
+    stringsOffset = extractedStrings.length-originalExtractedStringsLength
     i=0
     while(selectedTablePointers[i]!=undefined){
       oldSelectedTablePointers[i] = selectedTablePointers[i]
@@ -3904,7 +4043,11 @@ function pointersTableUpdater(){
     currentContent = Buffer.from(tempCurrentContent,"binary")
   }
   getSectionedCurrentContent()
-  getOrganizedSections()
+  if(getOrganizedSections()===1){
+    removePointersTable()
+    return
+  }
+  getGlobalExtractedStrings()
   stringsOldOffset = stringsOffset
 
   if(exportAllMode===false){
@@ -4138,7 +4281,30 @@ async function alignTwoCsv(){
   })
 }
 
+function sectionNameButtonIsBeingPressed(options) {
 
+  if(options===0){
+    clearInterval(timer);
+    timer = setInterval(function() {
+      if(sectionNameUpButton.isDown()===true){
+        plus1(pointersTableMode)
+      }else{
+        plus1(pointersTableMode)
+        clearInterval(this)
+      }
+    }, 100)
+  }else{
+    clearInterval(timer);
+    timer = setInterval(function() {
+      if(sectionNameDownButton.isDown()===true){
+        minus1(pointersTableMode)
+      }else{
+        minus1(pointersTableMode)
+        clearInterval(this)
+      }
+    }, 100)
+  }
+}
 
 //Toolbar and main Window--------------------------------------------------------
 const win = new QMainWindow;
@@ -4188,7 +4354,7 @@ encodingMenuAction1.setChecked(true)
 encodingMenuAction1.setEnabled(false)
 
 const fileSizeMenu = new QMenu()
-// fileSizeMenu.setDisabled(true)
+fileSizeMenu.setDisabled(true)
 fileSizeMenu.setTitle("File size: Keep")
 fileSizeMenu.setToolTip("Maintain the file size when a string is overwritten by a bigger one.\nBy default is keep.")
 const fileSizeMenuAction1 = new QAction();
@@ -4682,8 +4848,12 @@ sectionNameDownButton.setInlineStyle(`
 width:32px;
 `)
 
-sectionNameUpButton.addEventListener("clicked",function () {plus1(pointersTableMode)})
-sectionNameDownButton.addEventListener("clicked",function () {minus1(pointersTableMode)})
+sectionNameUpButton.addEventListener("pressed",function () {
+  sectionNameButtonIsBeingPressed(0)
+})
+sectionNameDownButton.addEventListener("pressed",function () {
+  sectionNameButtonIsBeingPressed(1)
+})
 
 
 //RWA:Table Pointers Address---------------------------------------------------------------
