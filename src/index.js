@@ -23,7 +23,8 @@ const {
   QDialog,
   QIcon,
   QButtonGroup,
-  QRadioButton
+  QRadioButton,
+  QProgressDialog
 
 } = require("@nodegui/nodegui");
 
@@ -1537,7 +1538,7 @@ function csvSelection(){
   return selectedCsv
 }
 
-function csvTranslationPhase2(selectedCsv,options){
+function csvTranslationPhase2(selectedCsv,options,dontUseAwait){
 
   let csvContent = fs.readFileSync(`${selectedCsv}`);
 
@@ -1791,7 +1792,7 @@ function csvTranslationPhase2(selectedCsv,options){
   }
   csvTranslationMode = true
 
-foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options)
+foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options,dontUseAwait)
 }
 
 //Organize the data from the csv given by the user, saving them in
@@ -1830,8 +1831,8 @@ function csvTranslation(options){
     if(selectedCsv===null){
       return
     }
-    
-    csvTranslationPhase2(selectedCsv,options)
+    let dontUseAwait =false
+    csvTranslationPhase2(selectedCsv,options,dontUseAwait)
   })
 
   csvTranslationForThisPT.addEventListener("clicked", function(){
@@ -1843,15 +1844,25 @@ function csvTranslation(options){
     }
     goToStart()
     let k =0
+    let dontUseAwait = true
 
+    translatedStringsQProgressDialog.setMaximum(sectionedCurrentContent.length)
+    translatedStringsQProgressDialog.setLabelText(`Translating...`)
+    translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
+    translatedStringsQProgressDialog.show()
+     let refresh = new QApplication()
+     refresh.processEvents()
     while(k!=sectionedCurrentContent.length){
-      
-      csvTranslationPhase2(selectedCsv,options)
+
+      translatedStringsQProgressDialog.setValue(k)
+      refresh.processEvents()
+      csvTranslationPhase2(selectedCsv,options,dontUseAwait)
 
       plus1(pointersTableMode)
 
       k=k+1
     }
+    translatedStringsQProgressDialog.close()
   })
 
   csvTranslationDialog.exec()
@@ -1862,26 +1873,29 @@ function sleep(ms) {
     setTimeout(resolve, ms);
   });
 }
-
-const tests2 = new QDialog()
-const tests2Q = new QLineEdit()
-const testsFB = new FlexLayout()
-tests2.setLayout(testsFB)
-testsFB.addWidget(tests2Q)
-tests2.setWindowTitle("Test")
-tests2.setFixedSize(200,200)
-
+const translatedStringsQProgressDialog = new QProgressDialog()
+translatedStringsQProgressDialog.updatesEnabled(true)
+translatedStringsQProgressDialog.cancel()
+translatedStringsQProgressDialog.setFixedSize(260,200)
 
 //Uses the data from  and stringToSearchInShiftJisBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
 //translated text in replacementStringsInShiftJisBuffer/replaceStrings.
-async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
+async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontUseAwait){
   let lastCsvTranslationLogOriginal = []
   let lastCsvTranslationLogReplacement = []
   let lastCsvTranslationLogReplacementClean = []
 
   let i = 0;
   let k = 0;
+
+  if(dontUseAwait!=true){
+    translatedStringsQProgressDialog.setMaximum(rawStrings.length-1)
+    translatedStringsQProgressDialog.setLabelText(`Waiting for the first match...`)
+    translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
+    translatedStringsQProgressDialog.show()
+  }
+  
   if(options===1){
 
     while(rawStrings[i] != undefined){
@@ -1897,12 +1911,11 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
             if(fastButton.isChecked()===true){
 
             }else{
-
-              errorMessageBox.setWindowTitle("Task in progress, please wait")
-              errorMessageBox.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-              errorMessageButton.setText("                                                Ok                                              ")
-              errorMessageBox.show()
-              await sleep(150);
+              if(dontUseAwait!=true){
+                translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+                await sleep(200);
+              }
+              console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
             }
 
           lastCsvTranslationLogReplacement[i] = tempReplaceString.toString("utf8").replace(/\x00\x00/g, '[CHECK]')
@@ -1918,11 +1931,14 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
   
       k=0;
       i=i+1;
-
+      if(dontUseAwait!=true){
+        translatedStringsQProgressDialog.setValue(i)
+      }
     }
   }else{
-    while(rawStrings[i] != undefined){
 
+
+    while(rawStrings[i] != undefined){
       while(replaceStrings[k]!= undefined){
         let tempSearchString= searchStrings[k].toString("hex")
   
@@ -1939,12 +1955,12 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
             if(fastButton.isChecked()===true){
 
             }else{
-          
-              errorMessageBox.setWindowTitle("Task in progress, please wait")
-              tests2Q.setText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-              tests2.show()
-              await sleep(350);
-              tests2.close()
+            
+              if(dontUseAwait!=true){
+                translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+                await sleep(200);
+              }
+              console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
             }
 
           lastCsvTranslationLogReplacement[k]= replaceStrings[k].toString("utf8").replace(/\x00\x00/g,"[CHECK]")
@@ -1962,6 +1978,9 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
       k=0;
       i=i+1;
 
+      if(dontUseAwait!=true){
+        translatedStringsQProgressDialog.setValue(i)
+      }
 
     }
     if(pointer1AddressDecimal!="" &&csvTranslationMode===true){
@@ -2026,12 +2045,14 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options){
     }
   }
   
-  await sleep(300);
-
-  errorMessageBox.setWindowTitle("Task completed")
-  errorMessageBox.setText(`Task Completed`)
-  errorMessageButton.setText("                                                Ok                                              ")
-  errorMessageBox.show()
+  if(dontUseAwait!=true){
+    await sleep(300);
+    translatedStringsQProgressDialog.close()
+    errorMessageBox.setWindowTitle("Task completed")
+    errorMessageBox.setText(`Task Completed`)
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.show()
+  }
 }
 
 function exportAllSelection(){
