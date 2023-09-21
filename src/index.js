@@ -1378,9 +1378,11 @@ function plus1(tableMode,options){
     }
 
   }else{
+
     if(sectionNameNumber.text() === `${sectionedCurrentContent.length} `){
       return
     }
+    savedString=""
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
     loadPTConfiguration()
   }
@@ -1392,10 +1394,12 @@ function minus1(tableMode){
   if(sectionNameNumber.text() === "1 "){
     return
   }
+
   if(tableMode===false){
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
     loadConfiguration()
   }else{
+    savedString=""
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
 
     loadPTConfiguration()
@@ -2023,7 +2027,8 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
     if(needsCheck.length!=0&&duplicates.length===0){
 
       errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n").replaceAll("[CHECK]","")}`)
+      errorMessageBox.setText("The task finished with some results that may be wrong.")
+      errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n").replaceAll("[CHECK]","")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
 
@@ -2034,7 +2039,8 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
     }else if(needsCheck.length===0&&duplicates.length!=0){
 
       errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
+      errorMessageBox.setText("The task finished with some results that may be wrong.")
+      errorMessageBox.setDetailedText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
 
@@ -2045,7 +2051,8 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
     }else{
 
       errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
+      errorMessageBox.setText("The task finished with some results that may be wrong.")
+      errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
       
@@ -3929,12 +3936,12 @@ function getOrganizedSections(){
 
         if(fileSizeMenuAction1.isChecked()===true||savedString===""){
 
-          tableEndStringFileAddresses[i ]= postLastStringAddress
+          tableEndStringFileAddresses[i]= postLastStringAddress
 
         }else if(fileSizeMenuAction2.isChecked()===true){
 
           tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress,16) + (currentContent.length-oldcurrentContentLength)).toString(16)
-
+          postLastStringAddress = tableEndStringFileAddresses[i] 
         }
       }
     }
