@@ -76,8 +76,8 @@ let sectionedCurrentContent = []
 let selectedPTFile = ""
 let pointersTableMode = false
 let csvTranslationMode = false
-let exportAllMode = false
-let exportAllModeVariable = 0
+let specialMode = false
+let modeVariable = 0
 let pointersTableModeSettingsArr = []
 let currentTableContent = []
 let organizedSections = []
@@ -88,13 +88,14 @@ let shiftJISEncoding = false
 let UTF8Encoding = true
 let originalExtractedStringsLength = 0
 let globalOffset = 0
-let stopExport = false
-let skipExport = false
+let stopProcess = false
+let skipThisSection = false
 let postLastStringAddress
 let globalExtractedStrings = []
 let globalAddressOfEachString = []
 let oldcurrentContentLength
 let timer
+let csvTranslationCanceled = false
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -223,13 +224,13 @@ function saveAndPrepare(tableMode){
     console.log("Both strings and pointers address are in a correct hex format!")
 
   }else{
-    if(exportAllMode===false){
+    if(specialMode===false){
       errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
-      skipExport=true
+      skipThisSection=true
     }
     return
   }
@@ -307,7 +308,7 @@ function saveAndPrepare(tableMode){
   pointersEditor.setEnabled(true)
   pointersViewerForSharedPointersListWidget.setEnabled(true)
   bigEndian.setEnabled(false)
-  fastButton.setEnabled(false)
+  // fastButton.setEnabled(false)
 
   extractedPointers = currentContent.slice(pointer1AddressDecimal,pointer2AddressDecimal)
 
@@ -494,13 +495,13 @@ function saveAndPrepare2(){
 
   else{
 
-    if(exportAllMode===false){
+    if(specialMode===false){
       errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
-      skipExport=true
+      skipThisSection=true
     }
     return
   }
@@ -517,14 +518,14 @@ function saveAndPrepare2(){
   if(string1AddressDecimal>currentContent.length ||
   string2AddressDecimal>currentContent.length){
    
-    if(exportAllMode===false){
+    if(specialMode===false){
       errorMessageBox.setWindowTitle("Error")
       errorMessageBox.setText("At least one string address is too big for this file x_x")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
       return
     }else{
-      skipExport=true
+      skipThisSection=true
     }
 
   }else if(string2AddressDecimal<string1AddressDecimal){
@@ -976,7 +977,9 @@ function saveProgress(options,replacement){
   
     rawStrings[listWidget.currentRow()] = savedString
     extractedStrings = Buffer.concat(rawStrings)
-  if(extractedStrings.length>extractedStringsOLD.length){
+
+    //Recordatory: Re-check this thing if something related to strings fail
+  if(extractedStrings.length>extractedStringsOLD.length&&pointersTableMode===true){
     extractedStringsOLD = Buffer.concat(rawStrings)
     // console.log("Updating extractedStringsOLD")
   }
@@ -998,7 +1001,7 @@ function saveProgress(options,replacement){
     listWidget.item(listWidget.currentRow()).setText(rawStrings[listWidget.currentRow()].toString("utf8"))
     stringEditorTextEdit.setPlainText(rawStrings[listWidget.currentRow()].toString("utf8"))
     extractedStrings = Buffer.concat(rawStrings)
-  }else{
+  }else {
 
     if(pointersTableMode===false){
       while(extractedStrings.length>originalExtractedStringsLength){
@@ -1011,66 +1014,6 @@ function saveProgress(options,replacement){
     }
   }
   i = 1
-
-
-// This while is a debug feature, if for some reason there are two raw pointers
-//equals one after another it will trigger a console.log
-//there can be false positives tho.
-  // while(extractedPointersIn4[i] != undefined){
-  //   let tempRawStringPast= ""
-  //   let tempRawStringFuture= ""
-  //   k=-1
-  //   if(extractedPointersIn4[i].toString("hex") != "00000000"){
-
-  //     while(extractedPointersIn4[k+i].toString("hex") !=undefined){
-
-  //       if(extractedPointersIn4[k+i].toString("hex") !="00000000"){
-  //         tempRawStringPast = extractedPointersIn4[k+i]
-  //         pastPoint=k+i
-  //         break
-  //       }else{
-
-  //       }
-  //       k=k-1;
-  //     }
-  //     k =1
-  //     while(extractedPointersIn4[i+k] !=undefined){
-
-  //       if(extractedPointersIn4[i+k].toString("hex") !="00000000"){
-  //         tempRawStringFuture = extractedPointersIn4[i+k]
-  //         futurePoint=k+i
-  //         break
-  //       }
-  //       k=k+1;
-  //     }
-
-  //     k=1
-  //     if(tempRawStringPast.toString("hex")!=extractedPointersIn4[i].toString("hex")
-  //        &&tempRawStringFuture.toString("hex")!=extractedPointersIn4[i].toString("hex")){
-
-  //     }else if(tempRawStringPast.toString("hex")===extractedPointersIn4[i].toString("hex")
-  //        &&extractedPointersIn4[i].toString("hex")!= tempRawStringFuture.toString("hex")){
-         
-  //         while(pointersHexValues[k]!=undefined){
-
-  //           if(pointersHexValues[k-1].toUpperCase() === tempRawStringPast.toString("hex").toUpperCase()
-  //           &&pointersHexValues[k].toUpperCase() != extractedPointersIn4[i].toString("hex").toUpperCase() ){
-
-
-  //           }else if(pointersHexValues[k-1].toUpperCase() != tempRawStringPast.toString("hex").toUpperCase()
-  //           &&pointersHexValues[k].toUpperCase() === extractedPointersIn4[i].toString("hex").toUpperCase() ){
-
-  //           }
-
-  //           k=k+1
-  //         }
-
-  //     }else if(tempRawStringFuture.toString("hex")===extractedPointersIn4[i].toString("hex")
-  //        && extractedPointersIn4[i].toString("hex")!=tempRawStringPast.toString("hex")){
-  //     }
-  //   }
-  //   i=i+1
-  // }
 
   while(extractedStrings.length<extractedStringsOLD.length){
 
@@ -1319,7 +1262,7 @@ function setDefaultValues(options){
   pointersViewerForSharedPointersListWidget.setEnabled(false)
   mainMenuAction3.setEnabled(false)
   bigEndian.setEnabled(true)
-  fastButton.setEnabled(true)
+  // fastButton.setEnabled(true)
 
   stringEditorTextEdit.setPlainText("")
 
@@ -1362,8 +1305,8 @@ function loadConfiguration(){
     console.log(`Not valid data for ${sectionNameNumber.text()}, hex spaces will be empty`)
     setDefaultValues()
 
-    if(exportAllMode===true){
-      stopExport =true
+    if(specialMode===true){
+      stopProcess =true
     }
 
     start()
@@ -1419,16 +1362,16 @@ function plus1(tableMode,options){
     if(sectionNameNumber.text() === "255 "){
       return
     }
-    if(exportAllModeVariable===0){
+    if(modeVariable===0){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
 
-    }else if(options>1&&exportAllModeVariable===2){
+    }else if(options>1&&modeVariable===2){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
       saveAndPrepare()
 
-    }else if(options>1&&exportAllModeVariable===1){
+    }else if(options>1&&modeVariable===1){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
       saveAndPrepare2()
@@ -1538,7 +1481,135 @@ function csvSelection(){
   return selectedCsv
 }
 
-function csvTranslationPhase2(selectedCsv,options,dontUseAwait){
+//Organize the data from the csv given by the user, saving them in
+//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
+async function csvTranslation(options){
+
+  const csvTranslationDialog = new QDialog()
+  const csvTranslationRow = new QWidget()
+
+  const csvTranslationDialogLayout = new QBoxLayout(2)
+  const csvTranslationRowLayout = new QBoxLayout(0)
+
+  csvTranslationRow.setLayout(csvTranslationRowLayout)
+  csvTranslationDialog.setFixedSize(300,80)
+
+  csvTranslationDialog.setLayout(csvTranslationDialogLayout)
+  csvTranslationDialog.setModal(true)
+
+  csvTranslationDialogLayout.addWidget(csvTranslationRow)
+
+  csvTranslationDialog.setWindowTitle("Select one translation option")
+
+  const csvTranslationForThisSection = new QPushButton()
+  const csvTranslationForThisPT = new QPushButton()
+
+  // if(pointersTableMode===false){
+  //   csvTranslationForThisPT.setEnabled(false)
+  // }
+  csvTranslationForThisSection.setText("Strings in this section")
+  csvTranslationForThisPT.setText("Strings in all sections")
+
+  csvTranslationRowLayout.addWidget(csvTranslationForThisSection)
+  csvTranslationRowLayout.addWidget(csvTranslationForThisPT)
+
+  csvTranslationForThisSection.addEventListener("clicked", function(){
+    csvTranslationDialog.close()
+    let selectedCsv = csvSelection()
+
+    if(selectedCsv===null){
+      return
+    }
+
+    let endReached = true
+    csvTranslationPhase2(selectedCsv,options,endReached)
+    translatedStringsQProgressDialog.close()
+    csvTranslationCanceled = false
+  })
+
+  csvTranslationForThisPT.addEventListener("clicked", function(){
+    csvTranslationDialog.close()
+    let selectedCsv = csvSelection()
+
+    if(selectedCsv===null){
+      return
+    }
+
+    let k =0
+
+    let endReached = false
+    specialMode = true
+
+    if(pointer1AddressDecimal===""){
+      modeVariable = 1
+    }else{
+      modeVariable = 2
+    }
+
+    goToStart()
+
+    if(pointersTableMode===true){
+      csvTranslationForThisPTLoop:
+      while(k!=sectionedCurrentContent.length){
+  
+        if(csvTranslationCanceled===true||stopProcess===true){
+          break csvTranslationForThisPTLoop
+        }
+        if(k===sectionedCurrentContent.length-1){
+          endReached = true
+        }
+  
+        if(skipThisSection===false){
+          csvTranslationPhase2(selectedCsv,options,endReached)
+        }
+  
+        skipThisSection = false
+        if(csvTranslationCanceled===false){
+
+          plus1(pointersTableMode,2)
+        }
+
+  
+        k=k+1
+      }
+    }else{
+
+      if(modeVariable===2){
+        saveAndPrepare()
+      }else{
+        saveAndPrepare2()
+      }
+
+      while(endReached===false &&csvTranslationCanceled===false){
+
+        if(stopProcess===true){
+          endReached = true
+          csvTranslationCanceled = true
+        }
+
+        if(skipThisSection===false||stopProcess===true){
+          csvTranslationPhase2(selectedCsv,options,endReached)
+        }
+
+        skipThisSection = false
+        if(csvTranslationCanceled===false){
+
+          plus1(pointersTableMode,2)
+        }
+      }
+    }
+    translatedStringsQProgressDialog.close()
+    modeVariable=0
+    specialMode = false
+    skipThisSection = false
+    stopProcess=false
+    csvTranslationCanceled = false
+  })
+
+  csvTranslationDialog.exec()
+}
+
+function csvTranslationPhase2(selectedCsv,options,endReached){
 
   let csvContent = fs.readFileSync(`${selectedCsv}`);
 
@@ -1593,7 +1664,7 @@ function csvTranslationPhase2(selectedCsv,options,dontUseAwait){
 
     }else if(testCsvContent[i].substring(0,2)==="3b" &&nextBadSemicolonWillStopTheTest === true){
 
-      errorMessageBox.setText(`The text #${i+1} to be translated has not it\n translated counterpart.`)
+      errorMessageBox.setText(`The text #${i+1} to be translated has not it\ntranslated counterpart.`)
       errorMessageBox.setWindowTitle("Error, check your .csv file")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
@@ -1792,96 +1863,14 @@ function csvTranslationPhase2(selectedCsv,options,dontUseAwait){
   }
   csvTranslationMode = true
 
-foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options,dontUseAwait)
+foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options,endReached)
 }
-
-//Organize the data from the csv given by the user, saving them in
-//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
-function csvTranslation(options){
-
-  const csvTranslationDialog = new QDialog()
-  const csvTranslationRow = new QWidget()
-
-  const csvTranslationDialogLayout = new QBoxLayout(2)
-  const csvTranslationRowLayout = new QBoxLayout(0)
-
-  csvTranslationRow.setLayout(csvTranslationRowLayout)
-  csvTranslationDialog.setFixedSize(300,80)
-
-  csvTranslationDialog.setLayout(csvTranslationDialogLayout)
-  csvTranslationDialog.setModal(true)
-
-  csvTranslationDialogLayout.addWidget(csvTranslationRow)
-
-  csvTranslationDialog.setWindowTitle("Select one translation option")
-
-  const csvTranslationForThisSection = new QPushButton()
-  const csvTranslationForThisPT = new QPushButton()
-
-  csvTranslationForThisSection.setText("Strings in this section")
-  csvTranslationForThisPT.setText("Strings from .pt file")
-
-  csvTranslationRowLayout.addWidget(csvTranslationForThisSection)
-  csvTranslationRowLayout.addWidget(csvTranslationForThisPT)
-
-  csvTranslationForThisSection.addEventListener("clicked", function(){
-    csvTranslationDialog.close()
-    let selectedCsv = csvSelection()
-
-    if(selectedCsv===null){
-      return
-    }
-    let dontUseAwait =false
-    csvTranslationPhase2(selectedCsv,options,dontUseAwait)
-  })
-
-  csvTranslationForThisPT.addEventListener("clicked", function(){
-    csvTranslationDialog.close()
-    let selectedCsv = csvSelection()
-
-    if(selectedCsv===null){
-      return
-    }
-    goToStart()
-    let k =0
-    let dontUseAwait = true
-
-    translatedStringsQProgressDialog.setMaximum(sectionedCurrentContent.length)
-    translatedStringsQProgressDialog.setLabelText(`Translating...`)
-    translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
-    translatedStringsQProgressDialog.show()
-     let refresh = new QApplication()
-     refresh.processEvents()
-    while(k!=sectionedCurrentContent.length){
-
-      translatedStringsQProgressDialog.setValue(k)
-      refresh.processEvents()
-      csvTranslationPhase2(selectedCsv,options,dontUseAwait)
-
-      plus1(pointersTableMode)
-
-      k=k+1
-    }
-    translatedStringsQProgressDialog.close()
-  })
-
-  csvTranslationDialog.exec()
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-const translatedStringsQProgressDialog = new QProgressDialog()
-translatedStringsQProgressDialog.updatesEnabled(true)
-translatedStringsQProgressDialog.cancel()
-translatedStringsQProgressDialog.setFixedSize(260,200)
 
 //Uses the data from  and stringToSearchInShiftJisBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
 //translated text in replacementStringsInShiftJisBuffer/replaceStrings.
-async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontUseAwait){
+//Option 1= Translate strings partially
+async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endReached){
   let lastCsvTranslationLogOriginal = []
   let lastCsvTranslationLogReplacement = []
   let lastCsvTranslationLogReplacementClean = []
@@ -1889,18 +1878,23 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
   let i = 0;
   let k = 0;
 
-  if(dontUseAwait!=true){
-    translatedStringsQProgressDialog.setMaximum(rawStrings.length-1)
-    translatedStringsQProgressDialog.setLabelText(`Waiting for the first match...`)
-    translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
-    translatedStringsQProgressDialog.show()
-  }
+  translatedStringsQProgressDialog.setMaximum(rawStrings.length-1)
+  translatedStringsQProgressDialog.setLabelText(`Waiting for 1° match in this section...`)
+  translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
+  translatedStringsQProgressDialog.show()
+  globalQApplication.processEvents()
   
   if(options===1){
 
+    rawStringLoop1:
     while(rawStrings[i] != undefined){
 
+
       while(replaceStrings[k]!= undefined){
+
+        if (csvTranslationCanceled===true){
+          break rawStringLoop1
+        }
 
         if(rawStrings[i].toString("hex").includes(searchStrings[k].toString("hex")) === true 
         && searchStrings[k].toString("hex") != ""){
@@ -1908,16 +1902,11 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
             let tempReplaceString = rawStrings[i].toString("hex").replaceAll(`${searchStrings[k].toString("hex")}`,`${replaceStrings[k].toString("hex")}`)
             tempReplaceString = Buffer.from(tempReplaceString,"hex")
 
-            if(fastButton.isChecked()===true){
 
-            }else{
-              if(dontUseAwait!=true){
-                translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-                await sleep(200);
-              }
-              console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            }
-
+            translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+            // console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+            globalQApplication.processEvents()
+            
           lastCsvTranslationLogReplacement[i] = tempReplaceString.toString("utf8").replace(/\x00\x00/g, '[CHECK]')
           lastCsvTranslationLogReplacementClean[i] = tempReplaceString.toString("utf8").replace(/\x00/g,"")
           lastCsvTranslationLogOriginal[i] = rawStrings[i].toString("utf8")
@@ -1931,17 +1920,22 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
   
       k=0;
       i=i+1;
-      if(dontUseAwait!=true){
-        translatedStringsQProgressDialog.setValue(i)
-      }
+
+      translatedStringsQProgressDialog.setValue(i)
+      globalQApplication.processEvents()
     }
   }else{
 
-
+    rawStringLoop2:
     while(rawStrings[i] != undefined){
+
       while(replaceStrings[k]!= undefined){
         let tempSearchString= searchStrings[k].toString("hex")
   
+        if (csvTranslationCanceled===true){
+          break rawStringLoop2
+        }
+
         if(rawStrings[i].length>Buffer.from(searchStrings[k].toString("hex").replaceAll("0a200a","0a0a"),"hex").length){
           while(tempSearchString.replaceAll("0a200a","0a0a").length<rawStrings[i].toString("hex").length){
             tempSearchString= tempSearchString +"00"
@@ -1952,16 +1946,10 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
           && searchStrings[k].toString("hex") != ""
           && rawStrings[i].toString("hex")===tempSearchString.replaceAll("0a200a","0a0a")){
         
-            if(fastButton.isChecked()===true){
 
-            }else{
-            
-              if(dontUseAwait!=true){
-                translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-                await sleep(200);
-              }
-              console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            }
+            translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+            // console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
+            globalQApplication.processEvents()
 
           lastCsvTranslationLogReplacement[k]= replaceStrings[k].toString("utf8").replace(/\x00\x00/g,"[CHECK]")
           lastCsvTranslationLogReplacementClean[k] = replaceStrings[k].toString("utf8").replace(/\x00/g,"")
@@ -1978,9 +1966,9 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
       k=0;
       i=i+1;
 
-      if(dontUseAwait!=true){
-        translatedStringsQProgressDialog.setValue(i)
-      }
+
+      translatedStringsQProgressDialog.setValue(i)
+      globalQApplication.processEvents()
 
     }
     if(pointer1AddressDecimal!="" &&csvTranslationMode===true){
@@ -1991,10 +1979,15 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
       let rawLenght2 = rawStrings.length
 
       if(rawLenght1>rawLenght2){
-        errorMessageBox.setText(`The process ended with fewer strings compared to when it\nstarted, please double-check the last strings and\npointers there are maybe some pointers duplicated.`)
+
+        errorMessageBox.setText(`The process ended with fewer strings compared to\nwhen its tarted, please double-check the last\nstrings and pointers there are maybe some pointers\nduplicated.`)
         errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
+        if(endReached===true){
+
+          return
+        }
       }
 
     }else if(pointer1AddressDecimal==="" &&csvTranslationMode===true){
@@ -2005,15 +1998,18 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
       let rawLenght2 = rawStrings.length
 
       if(rawLenght1>rawLenght2){
-        errorMessageBox.setText(`The process ended with fewer strings compared to when it\nstarted, please double-check the last strings and\npointers there are maybe some pointers duplicated.`)
+
+        errorMessageBox.setText(`The process ended with fewer strings compared to\nwhen its tarted, please double-check the last\nstrings and pointers there are maybe some pointers\nduplicated.`)
         errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
+        if(endReached===true){
+    
+          return
+        }
       }
     }
   }
-
-
 
   const duplicates = lastCsvTranslationLogReplacementClean.filter((item, index) => index !== lastCsvTranslationLogReplacementClean.indexOf(item))
 
@@ -2025,34 +2021,54 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,dontU
     needsCheck = needsCheck.map(function(x) {return x.replace("[CHECK]","")})
 
     if(needsCheck.length!=0&&duplicates.length===0){
+
       errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}`)
+      errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n").replaceAll("[CHECK]","")}`)
       errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.show()
-      return
+      errorMessageBox.exec()
+
+      if(endReached===true){
+
+        return
+      }
     }else if(needsCheck.length===0&&duplicates.length!=0){
+
       errorMessageBox.setWindowTitle("Warning")
       errorMessageBox.setText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.show()
-      return
+      errorMessageBox.exec()
+
+      if(endReached===true){
+
+        return
+      }
     }else{
+
       errorMessageBox.setWindowTitle("Warning")
       errorMessageBox.setText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.show()
-      return
+      errorMessageBox.exec()
+      
+      if(endReached===true){
+
+        return
+      }
     }
   }
-  
-  if(dontUseAwait!=true){
-    await sleep(300);
-    translatedStringsQProgressDialog.close()
+
+  if(endReached===true){
+
     errorMessageBox.setWindowTitle("Task completed")
     errorMessageBox.setText(`Task Completed`)
     errorMessageButton.setText("                                                Ok                                              ")
     errorMessageBox.show()
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function exportAllSelection(){
@@ -2168,7 +2184,7 @@ function exportAllSelection(){
     exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings, Pointers, etc on this Pointers Table.")
     
     exportAllSelectionStringsInFolderButton.setText("Strings in all .pt files")
-    exportAllSelectionStringsInFolderButton.setToolTip("Export all the strings on all the Pointers Tables found\n in the Pointers Tables folder.\nWarning: Be sure that all the tables works without errors.")
+    exportAllSelectionStringsInFolderButton.setToolTip("Export all the strings on all the Pointers Tables found\nin the Pointers Tables folder.\nWarning: Be sure that all the tables works without errors.")
     
     exportAllSelectionAllInFolderButton.setText("All")
     exportAllSelectionAllInFolderButton.setToolTip("All")
@@ -2242,33 +2258,33 @@ function exportStringsFromAllSections(dataToExport,options,addFileName){
   dataToExport = []
   dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
 
-  exportAllModeVariable = 1
+  modeVariable = 1
   let i = 0
-  exportAllMode =true
+  specialMode =true
   let l =0
   goToStart()
   saveAndPrepare2()
 
-  while(stopExport ===false){
+  while(stopProcess ===false){
     i= 0
 
     if(addFileName===true){
       dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
     }
 
-    while (rawStrings[i]!= undefined &&skipExport===false){
+    while (rawStrings[i]!= undefined &&skipThisSection===false){
 
       dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
       
       i=i+1
     }
-    if(skipExport===false){
+    if(skipThisSection===false){
       l=l+1
       dataToExport[l] = ""
     }
 
     // dataToExport[l] = String(dataToExport[l]).replaceAll("undefined","")
-    skipExport=false
+    skipThisSection=false
     plus1(pointersTableMode,options)
   }
   
@@ -2280,23 +2296,23 @@ function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName
   dataToExport = []
   dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
 
-  exportAllModeVariable = 1
+  modeVariable = 1
 
   let i = 0
   let l =0
 
-  exportAllMode =true
+  specialMode =true
 
   goToStart()
   saveAndPrepare2()
 
-  while(stopExport ===false){
+  while(stopProcess ===false){
     i= 0
 
     if(addFileName===true){
       dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
     }
-      while (rawStrings[i]!= undefined &&skipExport===false){
+      while (rawStrings[i]!= undefined &&skipThisSection===false){
 
 
         dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
@@ -2308,11 +2324,11 @@ function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName
         i=i+1
       }
 
-      if(skipExport===false){
+      if(skipThisSection===false){
         l=l+1
         dataToExport[l] = ""
       }
-    skipExport=false
+    skipThisSection=false
     plus1(pointersTableMode,options)
   }
   
@@ -2326,18 +2342,18 @@ function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
   let i = 0
   let l =0
   
-  exportAllMode =true
+  specialMode =true
 
   goToStart()
   saveAndPrepare()
 
-  while(stopExport ===false){
+  while(stopProcess ===false){
     i= 0
 
-    if(addFileName===true&&skipExport===false){
+    if(addFileName===true&&skipThisSection===false){
       dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
     }
-    while (rawStrings[i]!= undefined&&skipExport===false){
+    while (rawStrings[i]!= undefined&&skipThisSection===false){
 
       dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
       dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
@@ -2358,7 +2374,7 @@ function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
       }
       i= i+1;
     }
-    if(skipExport===false){
+    if(skipThisSection===false){
       l=l+1
       dataToExport[l] = ""
     }
@@ -2527,13 +2543,13 @@ let dataToExportFinal = []
         dataToExport = exportStringsFromAllSections(dataToExport,options,addFileName)
   
       }else if(options===3){
-        exportAllModeVariable =2
+        modeVariable =2
         dataToExport = exportStringsAndMoreFromAllSections(dataToExport,options,addFileName)
       }
     }
     //Pointers Table Mode ON
   }else if(pointersTableMode===true){
-    exportAllMode =true
+    specialMode =true
     dataToExport = []
     dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
     let l =0
@@ -2570,7 +2586,7 @@ let dataToExportFinal = []
           } 
           i=i+1
         }
-        if(skipExport===false){
+        if(skipThisSection===false){
           l=l+1
           dataToExport[l] = ""
         }
@@ -2650,7 +2666,7 @@ let dataToExportFinal = []
               
             i=i+1
           }
-          if(skipExport===false){
+          if(skipThisSection===false){
             l=l+1
             dataToExport[l] = ""
           }
@@ -2715,7 +2731,7 @@ let dataToExportFinal = []
           
             i=i+1
           }
-          if(skipExport===false){
+          if(skipThisSection===false){
             l=l+1
             dataToExport[l] = ""
           }
@@ -2727,10 +2743,10 @@ let dataToExportFinal = []
     }
   }
   
-  exportAllModeVariable =0
-  skipExport=false
-  stopExport=false
-  exportAllMode= false
+  modeVariable =0
+  skipThisSection=false
+  stopProcess=false
+  specialMode= false
 
   if(dataToExportFinal[0]===undefined){
 
@@ -2826,7 +2842,7 @@ function highlightPointers(){
 
       else if(i+2>extractedPointersIn4.length){
         errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\n are you sure that both pointer addresses are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
+        errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\nare you sure that both pointer addresses are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
       }
@@ -3524,12 +3540,15 @@ function getPointersTableData(){
   }
 
   //MHP3rd Preloaded Pointers Tables Configurations
-  if(pointersTableSectionNameLineEdit.text()==="0017"&& fs.readFileSync(`${selectedFile}`)[parseInt("72BED",16)]===93){
+  if(pointersTableSectionNameLineEdit.text()==="0017"){
+    
     lastPointerTableAddressLineEdit.setText("CC")
-    postLastStringAddressLineEdit.setText("72BED")
-  }else if(pointersTableSectionNameLineEdit.text()==="0017"&& fs.readFileSync(`${selectedFile}`)[parseInt("72F37",16)]===93){
-    lastPointerTableAddressLineEdit.setText("CC")
-    postLastStringAddressLineEdit.setText("72F37")
+    if(fs.readFileSync(`${selectedFile}`)[parseInt("72BED",16)]===93){
+      postLastStringAddressLineEdit.setText("72BED")
+    }else if(fs.readFileSync(`${selectedFile}`)[parseInt("72F37",16)]===93){
+      postLastStringAddressLineEdit.setText("72F37")
+    }
+
   }else if(pointersTableSectionNameLineEdit.text()==="2813"){//nonHD
     lastPointerTableAddressLineEdit.setText("0C")
     postLastStringAddressLineEdit.setText("389A")
@@ -3583,6 +3602,11 @@ tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
 
 getSectionedCurrentContent()
 if(getOrganizedSections()===1){
+
+  if(csvTranslationMode===true){
+    csvTranslationCanceled = true
+  }
+
   removePointersTable()
   return
 }
@@ -3736,6 +3760,11 @@ function loadPTConfiguration(){
 
     getSectionedCurrentContent()
     if(getOrganizedSections()===1){
+
+      if(csvTranslationMode===true){
+        csvTranslationCanceled = true
+      }
+
       removePointersTable()
       return
     }
@@ -3897,8 +3926,16 @@ function getOrganizedSections(){
         tableEndStringFileAddresses[i]= (Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length)).toString(16)
   
       }else{
-        
-        tableEndStringFileAddresses[i]= postLastStringAddress
+
+        if(fileSizeMenuAction1.isChecked()===true||savedString===""){
+
+          tableEndStringFileAddresses[i ]= postLastStringAddress
+
+        }else if(fileSizeMenuAction2.isChecked()===true){
+
+          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress,16) + (currentContent.length-oldcurrentContentLength)).toString(16)
+
+        }
       }
     }
 
@@ -3944,13 +3981,16 @@ function removePointersTable(){
   filePathQLineEditRead.setReadOnly(false)
   firstPointersTableAddressLineEdit.setText("")
   lastPointersTableAddressLineEdit.setText("")
-  
+  fileSizeMenu.setTitle("File Size: Keep")
   sectionDetailsLabel.setText(`Section name: String#N/A`)
   mainMenuAction1.setText("Load file")
   mainMenuAction3.setEnabled(true)
   fileSizeMenu.setEnabled(false)
   fileSizeMenuAction1.setChecked(true)
+  fileSizeMenuAction1.setEnabled(false)
   fileSizeMenuAction2.setChecked(false)
+  fileSizeMenuAction2.setEnabled(true)
+
   globalExtractedStrings = []
 
   sectionNameHeader = "Section name"
@@ -4065,13 +4105,18 @@ function pointersTableUpdater(){
   }
   getSectionedCurrentContent()
   if(getOrganizedSections()===1){
+
+    if(csvTranslationMode===true){
+      csvTranslationCanceled = true
+    }
+    
     removePointersTable()
     return
   }
   getGlobalExtractedStrings()
   stringsOldOffset = stringsOffset
 
-  if(exportAllMode===false){
+  if(specialMode===false||csvTranslationMode===true){
     saveTableConfiguration()
   }
 }
@@ -4331,6 +4376,8 @@ function sectionNameButtonIsBeingPressed(options) {
 const win = new QMainWindow;
 win.setFixedSize(728, 504);
 win.setWindowTitle('MH Pointers Tool');
+
+const globalQApplication = new QApplication()
 
 const mainMenu = new QMenu()
 
@@ -5377,6 +5424,17 @@ csvButton2.setToolTip("Use a .csv with semicolons to translate a group of string
 csvButton2.addEventListener("clicked",function (){csvTranslation(1)})
 csvButton2.setEnabled(false)
 
+const translatedStringsQProgressDialog = new QProgressDialog()
+translatedStringsQProgressDialog.updatesEnabled(true)
+translatedStringsQProgressDialog.cancel()
+translatedStringsQProgressDialog.setFixedSize(260,200)
+translatedStringsQProgressDialog.setModal(true)
+translatedStringsQProgressDialog.addEventListener("canceled",function (){
+
+  csvTranslationCanceled = true
+
+})
+
 //RWA:Export all data to a CSV button------------------------------------------
 const exportAllData = new QWidget();
 const exportAllDataLayout = new FlexLayout();
@@ -5412,7 +5470,7 @@ const fastButton = new QCheckBox();
 fastButton.setText("Fast")
 fastButton.setToolTip("Do not display a pop-up when .csv translation found a match.\nIf there are a lot of strings to be translated don't enable this option.")
 fastButton.setEnabled(true)
-bottomRightSquareLayout.addWidget(fastButton)
+// bottomRightSquareLayout.addWidget(fastButton)
 
 fastButton.setInlineStyle(`
 margin-left:1px;
