@@ -211,7 +211,7 @@ function start(){
 //Makes visible all the hidden options and then uses the given addresses by the user to
 //get the pointers (extractedPointers), add them as items in the pointers viewer and save them for later, 
 //then does the same for the text in the file (extractedStrings), add those to the listWidget and also
-//transform the Shift-Jis text to UTF8. Additionally saves a copy of extractedStrings to use it as reference to know
+//transform the encoded text to UTF8. Additionally saves a copy of extractedStrings to use it as reference to know
 //the amount of space that never must be surpassed.
 function saveAndPrepare(tableMode){
 
@@ -308,7 +308,6 @@ function saveAndPrepare(tableMode){
   pointersEditor.setEnabled(true)
   pointersViewerForSharedPointersListWidget.setEnabled(true)
   bigEndian.setEnabled(false)
-  // fastButton.setEnabled(false)
 
   extractedPointers = currentContent.slice(pointer1AddressDecimal,pointer2AddressDecimal)
 
@@ -638,7 +637,7 @@ function saveAndPrepare2(){
 //Gather all the info to know the offset of each string in the file and in the memory 
 //(the memory one is accurate only if the console uses pointers based in the total lenght of data in the RAM)
 //data = currentContent, basically, the file.
-function stringAddressFunc(data,start,end){
+function stringAddressFunc(data){
 
   let i = string1AddressDecimal;
   let phase = 0;
@@ -796,7 +795,7 @@ function stringAddressFuncWithoutPointers(data,start,end){
 }
 
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
-//are in the specified offset.
+//are in the specified section of the file, or the entire file if is a pointers table.
 function spaceLeftFunc(data){
   numSpaceLeft = 0
   let i = 0
@@ -1262,7 +1261,6 @@ function setDefaultValues(options){
   pointersViewerForSharedPointersListWidget.setEnabled(false)
   mainMenuAction3.setEnabled(false)
   bigEndian.setEnabled(true)
-  // fastButton.setEnabled(true)
 
   stringEditorTextEdit.setPlainText("")
 
@@ -1456,6 +1454,7 @@ function specificCharactersPerLine(x){
   }
 }
 
+//Display a window to choose a .csv
 function csvSelection(){
   const csvFileDialog = new QFileDialog()
   csvFileDialog.setNameFilter("*.csv")
@@ -1485,8 +1484,8 @@ function csvSelection(){
   return selectedCsv
 }
 
-//Organize the data from the csv given by the user, saving them in
-//replacementStringsInShiftJisBuffer and stringToSearchInShiftJisBuffer.
+//Creates all the objects neccesary to make a selection window.
+//Manages the differents configurations and options that can be selected.
 async function csvTranslation(options){
 
   const csvTranslationDialog = new QDialog()
@@ -1508,9 +1507,6 @@ async function csvTranslation(options){
   const csvTranslationForThisSection = new QPushButton()
   const csvTranslationForThisPT = new QPushButton()
 
-  // if(pointersTableMode===false){
-  //   csvTranslationForThisPT.setEnabled(false)
-  // }
   csvTranslationForThisSection.setText("Strings in this section")
   csvTranslationForThisPT.setText("Strings in all sections")
 
@@ -1613,6 +1609,9 @@ async function csvTranslation(options){
   csvTranslationDialog.exec()
 }
 
+//Check if the given csv is valid (separated by semicolons)
+//Organize the data from the csv given by the user, saving them in
+//replacementStringsEncodedBuffer and stringToSearchEncodedBuffer.
 function csvTranslationPhase2(selectedCsv,options,endReached){
 
   let csvContent = fs.readFileSync(`${selectedCsv}`);
@@ -1870,9 +1869,9 @@ function csvTranslationPhase2(selectedCsv,options,endReached){
 foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options,endReached)
 }
 
-//Uses the data from  and stringToSearchInShiftJisBuffer/searchStrings
+//Uses the data from stringToSearchEncodedBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
-//translated text in replacementStringsInShiftJisBuffer/replaceStrings.
+//translated text in replacementStringsEncodedBuffer/replaceStrings.
 //Option 1= Translate strings partially
 async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endReached){
   let lastCsvTranslationLogOriginal = []
@@ -2072,12 +2071,14 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
   }
 }
 
+//Zzzzzz...
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
+//Create and manage the different options of the selection window for the "export to csv" button
 function exportAllSelection(){
 
   const exportAllSelectionDialog = new QDialog()
@@ -2225,6 +2226,7 @@ function exportAllSelection(){
   
 }
 
+//Self-explanarory
 function exportOnlyStringsOfSection(dataToExport,addFileName){
   let i = 0
 
@@ -2240,6 +2242,7 @@ function exportOnlyStringsOfSection(dataToExport,addFileName){
   return dataToExport
 }
 
+//Self-explanarory
 function exportStringsAndAddressOfSection(dataToExport,addFileName){
   
   if(addFileName===true){
@@ -2260,6 +2263,7 @@ function exportStringsAndAddressOfSection(dataToExport,addFileName){
   return dataToExport
 }
 
+//Self-explanarory
 function exportStringsFromAllSections(dataToExport,options,addFileName){
   
   dataToExport = []
@@ -2298,6 +2302,7 @@ function exportStringsFromAllSections(dataToExport,options,addFileName){
   return dataToExport
 }
 
+//Self-explanarory
 function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName){
   
   dataToExport = []
@@ -2342,6 +2347,7 @@ function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName
   return dataToExport
 }
 
+//Self-explanarory. "And more" means Hex values, adress of each strings and address of pointers.
 function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
   dataToExport = []
   dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
@@ -2390,6 +2396,8 @@ function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
   return dataToExport
 }
 
+//Check if the given string has semilcolons, if found one, add "" to the line where is the semicolon.
+//Additionally, also search for + and - at the start of a line, if found one, add a space at the start of the line.
 function checkForSemicolons(listWidgetString,style){
   let i =0
   if(listWidgetString.includes(";")===true){
@@ -2451,6 +2459,7 @@ function checkForSemicolons(listWidgetString,style){
   return listWidgetString
 }
 
+//Check if a given string has several newlines together, if that is the case, add spaces between them.
 function checkForBlankSpaces(listWidgetString){
 
   if(listWidgetString.includes("\n\n\n\n\n")===true){
@@ -3036,6 +3045,7 @@ function saveEditedPointer(){
   })
 }
 
+//Creates several windows one after another to gather info to create a .pt file to manage a pointers table.
 function getPointersTableData(){
 
   if(filePathQLineEditRead.text()==="N/A"){
@@ -3064,7 +3074,7 @@ function getPointersTableData(){
   const createPointersDialogLayout = new QBoxLayout(2)
   createPointersDialog.setLayout(createPointersDialogLayout)
 
-    //Table Name--------------------------------------------------------
+  //Table Name--------------------------------------------------------
 
   const pointersTableSectionNameTitle = new QWidget();
 
@@ -3150,7 +3160,6 @@ function getPointersTableData(){
   pointerTableAddressWidgetLayout.addWidget(pointerTableAddressLineEditWidget)
 
   //Global offset--------------------------------------------------------
-
 
   const gloalOffsetTitle = new QWidget();
   const globalOffsetTitleLayout = new FlexLayout();
@@ -3266,6 +3275,7 @@ function getPointersTableData(){
   `)
 
   firstStringTitleLayout.addWidget(firstStringAddressLineEdit2)
+
   //Post-last string of the last Pointers Table--------------------------------------------------------
 
   const postLastStringTitle = new QWidget();
@@ -3601,6 +3611,8 @@ function getPointersTableData(){
 
 }
 
+//Usses the info gather by the getPointersTableData() to creates a .pt file
+//This file is saved by default in rootFolder/Pointers Tables
 async function createPointersTable(name){
 
 tableStartPointerFileAddresses[0] = (parseInt(firstPointerAddressLineEdit.text(),16)).toString(16)
@@ -3627,6 +3639,10 @@ await sleep(200);
 loadPointersTable(`./Pointers Tables/${name + ".pt"}`)
 }
 
+//Displays a window to select a .pt file
+//Load .pt file and check if the path of the analized file is correct
+//Turn Pointers Table Mode to On by enabling and disabling some objects
+//Make adjustments to window size
 function loadPointersTable(pathToPTFile){
 
   if(pathToPTFile!=undefined){
@@ -3714,6 +3730,7 @@ function loadPointersTable(pathToPTFile){
   loadPTConfiguration()
 }
 
+//Load and set all the data from the .pt file
 function loadPTConfiguration(){
   if(
     pointersTableModeSettingsArr[1] === undefined ||
@@ -3740,8 +3757,6 @@ function loadPTConfiguration(){
     currentTableContent = (fs.readFileSync(`${selectedPTFile}`)).toString()
     pointersTableModeSettingsArr = currentTableContent.split(`\n`)
     
-
-
     while(pointersTableModeSettingsArr[i]!=''){
 
     selectedTablePointers[k]=pointersTableModeSettingsArr[i]
@@ -3808,6 +3823,8 @@ function loadPTConfiguration(){
   }
 }
 
+//Uses the selected table pointers from the .pt file to get the parts or sections that made the
+//analized file. This goes from the first pointer until the first pointer of the next section.
 function getSectionedCurrentContent(){
   let i =0
   sectionedCurrentContent = []
@@ -3844,6 +3861,83 @@ function getSectionedCurrentContent(){
 
 }
 
+//Uses the data from getSectionedCurrentContent() to get their pointers and strings addresses
+function getOrganizedSections(){
+  let i=0
+
+  while(selectedTablePointers[i]!=undefined){
+
+    if(bigEndian.isChecked()===true){
+      tableStartPointerFileAddresses[i] = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i], "hex").length).toString(16)
+      
+      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset)).readUIntBE(0,4)
+      tableEndPointerStartStringFileAddresses[i]= (offset+ parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
+  
+      if(selectedTablePointers[i+1]!=undefined){
+        tableEndStringFileAddresses[i]= Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i+1], "hex").length).toString(16)
+  
+      }else{
+        tableEndStringFileAddresses[i]= postLastStringAddress
+      }
+    }else{
+      
+      tableStartPointerFileAddresses[i] = (Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length)).toString(16)
+      
+      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset),"hex").readUIntLE(0,4)
+      tableEndPointerStartStringFileAddresses[i]= ( offset+parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
+  
+      if(selectedTablePointers[i+1]!=undefined){
+        tableEndStringFileAddresses[i]= (Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length)).toString(16)
+  
+      }else{
+
+        if(fileSizeMenuAction1.isChecked()===true||savedString===""){
+
+          tableEndStringFileAddresses[i]= postLastStringAddress
+
+        }else if(fileSizeMenuAction2.isChecked()===true){
+
+          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress,16) + (currentContent.length-oldcurrentContentLength)).toString(16)
+          postLastStringAddress = tableEndStringFileAddresses[i] 
+        }
+      }
+    }
+
+    organizedSections[i] =`${i+1}\n`+
+    tableStartPointerFileAddresses[i].toUpperCase()+"\n"+
+    tableEndPointerStartStringFileAddresses[i].toUpperCase()  +"\n"+
+    tableEndStringFileAddresses[i].toUpperCase()  +"\n"
+
+    if(currentContent[parseInt(tableEndPointerStartStringFileAddresses[i],16)]===undefined){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return 1
+    }
+
+    i=i+1;
+  }
+}
+
+//Self-explanatory.
+//globalExtractedStrings and globalAddressOfEachString are needed to calculate
+//accurately the space left when table pointers mode is ON.
+function getGlobalExtractedStrings(){
+  
+  let i =0
+  let oldAddresses = addressOfEachString
+  while(tableEndPointerStartStringFileAddresses[i]!=undefined){
+
+    globalExtractedStrings[i] = currentContent.slice(parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
+    globalAddressOfEachString[i] = stringAddressFuncWithoutPointers(currentContent,parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
+
+    i =i+1
+  }
+  addressOfEachString = oldAddresses
+}
+
+//Saves .pt file data
 function saveTableConfiguration(name){
 
   if(organizedSections.length===0||organizedSections===undefined){
@@ -3905,78 +3999,7 @@ ${organizedSections.join(',').replace(/,/g, '\n').split()}
   })
 }
 
-function getOrganizedSections(){
-  let i=0
-
-  while(selectedTablePointers[i]!=undefined){
-
-    if(bigEndian.isChecked()===true){
-      tableStartPointerFileAddresses[i] = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i], "hex").length).toString(16)
-      
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset)).readUIntBE(0,4)
-      tableEndPointerStartStringFileAddresses[i]= (offset+ parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
-  
-      if(selectedTablePointers[i+1]!=undefined){
-        tableEndStringFileAddresses[i]= Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i+1], "hex").length).toString(16)
-  
-      }else{
-        tableEndStringFileAddresses[i]= postLastStringAddress
-      }
-    }else{
-      
-      tableStartPointerFileAddresses[i] = (Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length)).toString(16)
-      
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset),"hex").readUIntLE(0,4)
-      tableEndPointerStartStringFileAddresses[i]= ( offset+parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
-  
-      if(selectedTablePointers[i+1]!=undefined){
-        tableEndStringFileAddresses[i]= (Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length)).toString(16)
-  
-      }else{
-
-        if(fileSizeMenuAction1.isChecked()===true||savedString===""){
-
-          tableEndStringFileAddresses[i]= postLastStringAddress
-
-        }else if(fileSizeMenuAction2.isChecked()===true){
-
-          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress,16) + (currentContent.length-oldcurrentContentLength)).toString(16)
-          postLastStringAddress = tableEndStringFileAddresses[i] 
-        }
-      }
-    }
-
-    organizedSections[i] =`${i+1}\n`+
-    tableStartPointerFileAddresses[i].toUpperCase()+"\n"+
-    tableEndPointerStartStringFileAddresses[i].toUpperCase()  +"\n"+
-    tableEndStringFileAddresses[i].toUpperCase()  +"\n"
-
-    if(currentContent[parseInt(tableEndPointerStartStringFileAddresses[i],16)]===undefined){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      return 1
-    }
-
-    i=i+1;
-  }
-}
-
-function getGlobalExtractedStrings(){
-  
-  let i =0
-  let oldAddresses = addressOfEachString
-  while(tableEndPointerStartStringFileAddresses[i]!=undefined){
-
-    globalExtractedStrings[i] = currentContent.slice(parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
-    globalAddressOfEachString[i] = stringAddressFuncWithoutPointers(currentContent,parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
-
-    i =i+1
-  }
-  addressOfEachString = oldAddresses
-}
-
+//Similar to setDefaultValues(), removes all the special configurations from the pointers table mode.
 function removePointersTable(){
   saveSettingsButton.setEnabled(true)
   saveSettingsButton2.setEnabled(true)
@@ -4018,12 +4041,7 @@ function removePointersTable(){
   start()
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
+//Updates .pt file with new values
 function pointersTableUpdater(){
   let i=0
   //For the pointers table mode.
@@ -4128,6 +4146,7 @@ function pointersTableUpdater(){
   }
 }
 
+//Manages when the Shift-JIS encoding is selected.
 function setShiftJISEncoding(){
   if(encodingMenuAction2.isChecked()===true){
     encodingMenuAction1.setChecked(false)
@@ -4147,6 +4166,7 @@ function setShiftJISEncoding(){
   }
 }
 
+//Manages when the UTF8 encoding is selected.
 function setUTF8Encoding(){
   if(encodingMenuAction1.isChecked()===true){
     encodingMenuAction2.setChecked(false)
@@ -4185,6 +4205,7 @@ function setUTF16LEEncoding(){
 
 }
 
+//Manages the file size when a bigger string is overwritten.
 function fileSize(options){
   
   if(options===0){
@@ -4206,6 +4227,8 @@ function fileSize(options){
   }
 }
 
+//Align the strings of two csv side by side. Both must be separated by semicolons and
+//each string must be separated from another one by a new line.
 async function alignTwoCsv(){
 
   let selectedCsv1 = csvSelection()
@@ -4354,6 +4377,7 @@ async function alignTwoCsv(){
   })
 }
 
+//If the button is still being pressed, plus1() and minus1() will keep triggering.
 function sectionNameButtonIsBeingPressed(options) {
 
   if(options===0){
@@ -4641,8 +4665,8 @@ width:210px;
 flex:1;
 `)
 
-//When a item in the main list widget is clicked, all the relevant info for that string
-// is set.
+//When a item in the main list widget is clicked,
+//all the relevant info for that string is set.
 listWidget.addEventListener("clicked",() => {
   
   stringEditorTextEdit.setPlainText(listWidget.currentItem().text())
@@ -5254,7 +5278,6 @@ pointersViewerLeftLayout.addWidget(pointersEditorSaveButton)
 
 pointersEditorSaveButton.addEventListener("clicked",saveEditedPointer)
 
-
 const pointersEditorRealocateButton = new QPushButton()
 pointersEditorRealocateButton.setEnabled(false)
 
@@ -5439,7 +5462,6 @@ translatedStringsQProgressDialog.setModal(true)
 translatedStringsQProgressDialog.addEventListener("canceled",function (){
 
   csvTranslationCanceled = true
-
 })
 
 //RWA:Export all data to a CSV button------------------------------------------
