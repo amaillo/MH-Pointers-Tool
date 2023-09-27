@@ -18,7 +18,7 @@ I want to add that some of the before-mentioned games (the PS2 ones) were made u
 
 If you do some successful testing with any other games, please let me know to add it to this list ^-^O.
 
-## Compatible estructure
+## Compatible structure
 
 - The strings must be together but separated from each other by at least one null value (00).
 
@@ -29,14 +29,15 @@ These hex values are "１　２　３".
 
 - The pointers must be 4 bytes each. Can be both Big Endian (BE) or Little Endian (LE). Theoretically, they can be bigger, but bigger ones have not been tested yet since I don't have something to test them in the first place.
 
-Examples:
+Examples:<br />
+<pre>
 F0 F3 2C 00 10 F4 2C 00 30 F4 2C 00 //LE
 
 78 1F 00 00 79 1F 00 00 92 1F 00 00 //LE
 
 00 00 17 68 00 00 17 70 00 00 17 80 //BE
 
-80 62 95 B4 80 62 95 C4 80 62 AE 14 //BE
+80 62 95 B4 80 62 95 C4 80 62 AE 14 //BE</pre>
 
 Each line has 4 different pointers.
 
@@ -44,12 +45,12 @@ Each line has 4 different pointers.
 
 You will need at least 2 values in hexadecimal (without 0x), the address of the first string and the address of the next byte different from 00 that goes after the last string. The Hex values must be Big Endian.
 
-Example:
-Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
-
-00000000 FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
-00000010 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-00000020 82 50 00 00 82 51 00 00 82 52 00 00 01 02 03 00
+Example:<br />
+<pre>
+Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br />
+00000000 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
+00000010 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
+00000020 82 50 00 00 82 51 00 00 82 52 00 00 01 02 03 00<br /></pre>
 
 The values to use would be 20 for the start and 2C for the end.
 
@@ -131,18 +132,18 @@ I will briefly explain their structure.
 Some games like **Monster Hunter 2 (Dos)** and **Monster Hunter Portable 3rd** contain files in which strings use pointers tables that point to another pointer instead of directly pointing to a string. This 'main pointers table' or 'pointers table index' uses values that start with an offset of 0 (the start of the file) and each one of them points directly to the first pointer of a 'secondary pointers table'. Each pointer of this 'secondary pointers table' points to a string, using as offset the value of the main pointer + the value of the secondary pointer.
 
 Example:
-Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
-
-00000000 00 00 00 00 00 00 00 00 CC 00 00 00 FF 01 01 00 
-.
-.
-.
-000000C0 00 00 00 00 00 00 00 00 00 00 00 00 30 1F 00 00 
-000000D0 31 1F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-.
-.
-.
-00001FF0 00 00 00 00 00 00 00 00 FF FF FF FF 00 80 50 00 
+<pre>
+Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br /> 
+00000000 00 00 00 00 00 00 00 00 CC 00 00 00 FF 01 01 00<br />
+.<br />
+.<br />
+.<br />
+000000C0 00 00 00 00 00 00 00 00 00 00 00 00 30 1F 00 00<br />
+000000D0 31 1F 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
+.<br />
+.<br />
+.<br />
+00001FF0 00 00 00 00 00 00 00 00 FF FF FF FF 00 80 50 00<br /></pre>
 
 The first main pointer is CC (204 in decimals), and points to 30 1F (7984), 204+7984 = 8188 = 1FFC, the value in 1FFC is null (00) but by using 31 1F (7985) the next value is a string: 80 50 (is １).
 
