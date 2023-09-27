@@ -24,7 +24,9 @@ const {
   QIcon,
   QButtonGroup,
   QRadioButton,
-  QProgressDialog
+  QProgressDialog,
+  QFont,
+  QFontDatabase
 
 } = require("@nodegui/nodegui");
 
@@ -5245,6 +5247,7 @@ pointersEditor.setEnabled(false)
 
 pointersEditor.setPlaceholderText("Pointer to edit")
 pointersEditor.setInlineStyle(`
+font-size:12px;
 width:86px;`)
 
 const pointersEditorLabel = new QLabel()
@@ -5531,14 +5534,6 @@ autoCharaAdjust.setEnabled(false)
 //   }
 // })
 
-//Coding stuff------------------------------------------------------------------
-// const qApp = QApplication.instance()
-// qApp.setStyleSheet(`
-// * {
-// font-family:Segoe UI;
-// }
-// `)
-
 const fileDialog = new QFileDialog();
 let errorMessageBox = new QMessageBox()
 let errorMessageButton = new QPushButton()
@@ -5662,6 +5657,27 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
     }
   }
 });
+
+//Global font---------------------------------------------
+const appFont = new QFont()
+console.log(appFont.family())
+if(appFont.family()==="Segoe UI"){
+
+}else if(appFont.family()==="Ubuntu"){
+
+  globalQApplication.setStyleSheet(`
+  * {
+  font-size:13px;
+  }
+  `)
+}else{
+
+  globalQApplication.setStyleSheet(`
+  * {
+  font-size:12px;
+  }
+  `)
+}
 
 //CS:Show window------------------------------------------
 win.setCentralWidget(rootView);
