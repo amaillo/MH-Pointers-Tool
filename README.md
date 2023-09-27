@@ -176,7 +176,7 @@ npx nodegui-packer --pack dist
 
 ### Linux
 
-Linux Mint (21.1 Vera):
+Linux Mint (tested on 21.1 Vera):
 ```
 sudo apt-get update
 sudo apt install -y git
@@ -192,7 +192,7 @@ sudo npx nodegui-packer --pack dist
 If the AppRun file doesn't work, do this:
 Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins
 
-Ubuntu (22.04 Jammy):
+Ubuntu (tested on 22.04 Jammy):
 ```
 sudo apt-get update
 sudo apt install -y git
