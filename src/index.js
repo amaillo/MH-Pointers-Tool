@@ -4436,6 +4436,7 @@ mainMenu.addAction(mainMenuAction6)
 
 const encodingMenu = new QMenu()
 encodingMenu.setTitle("Encoding: UTF-8")
+encodingMenu.setToolTip("Encoding used to load and save text.")
 const encodingMenuAction1 = new QAction();
 const encodingMenuAction2 = new QAction();
 
