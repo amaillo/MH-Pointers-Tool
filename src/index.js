@@ -5660,7 +5660,7 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
 
 //Global font---------------------------------------------
 const appFont = new QFont()
-console.log(appFont.family())
+
 if(appFont.family()==="Segoe UI"){
 
 }else if(appFont.family()==="Ubuntu"){
