@@ -65,7 +65,7 @@ To find these addresses you can use any standard hex editor like MadEdit.
 
 -    **Easy handling** 
 
-You need two hex addresses (without 0x), the first string address, and an address that marks the end of a group of strings. You will also need to choose a file, both by clicking Menu>Load file>Choose a file or **drag and dropping it**. Optionally you can add the address of the first string pointer and an address that marks the end of a group of pointers, by doing this each string can be edited more freely as long as there is enough free space (extra null values), since it is possible to make the strings longer than they were originally.
+You need two hex addresses (without 0x), the first string address, and an address that marks the end of it group of strings. You will also need to choose a file, both by clicking Menu>Load file>Choose a file or **drag and dropping it**. Optionally you can add the address of the first string pointer and an address that marks the end of it group of pointers, by doing this each string can be edited more freely as long as there is enough free space (extra null values), since it is possible to make the strings longer than they were originally.
 
 Note: If a string is overwritten by a bigger one while using pointers, the last string will be cut to maintain the size of the file if there is not enough space.
 
@@ -147,7 +147,7 @@ Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br />
 
 The first main pointer is CC (204 in decimals), and points to 30 1F (7984), 204+7984 = 8188 = 1FFC, the value in 1FFC is null (00) but by using 31 1F (7985) the next value is a string: 80 50 (is １).
 
-To use this feature will be required an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last series of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
+To use this feature will be required an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last group of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
 
 Additionally, for MHP3rd, there were some particular files that needed another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
 
@@ -176,8 +176,9 @@ npx nodegui-packer --pack dist
 
 ### Linux
 
-Linux Mint:
+Linux Mint (21.1 Vera):
 ```
+sudo apt-get update
 sudo apt install -y git
 sudo apt-get install -y nodejs
 sudo apt install -y cmake
@@ -191,7 +192,7 @@ sudo npx nodegui-packer --pack dist
 If the AppRun file doesn't work, do this:
 Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins
 
-Ubuntu (22.04 jammy):
+Ubuntu (22.04 Jammy):
 ```
 sudo apt-get update
 sudo apt install -y git
