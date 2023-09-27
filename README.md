@@ -174,8 +174,9 @@ npx nodegui-packer --init MH-Pointers-Tool
 npx nodegui-packer --pack dist
 ```
 
-### Linux (tested on Linux mint)
+### Linux
 
+Linux Mint:
 ```
 sudo apt install -y git
 sudo apt-get install -y nodejs
@@ -187,9 +188,24 @@ sudo npm start
 sudo npx nodegui-packer --init MH-Pointers-Tool
 sudo npx nodegui-packer --pack dist
 ```
-
 If the AppRun file doesn't work, do this:
 Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins
+
+Ubuntu (22.4 jammy):
+```
+sudo apt-get update
+sudo apt install -y git
+sudo apt install -y cmake
+sudo apt install npm
+sudo npm install -g n
+sudo n latest
+sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
+cd ~/MH-Pointers-Tool
+sudo npm install
+sudo npm start
+sudo npx nodegui-packer --init MH-Pointers-Tool
+sudo npx nodegui-packer --pack dist
+```
 
 ## Special Thanks
 
