@@ -155,7 +155,10 @@ After filling in the required fields, by continuing a new window will appear. He
 
 ## Installation (Windows and Linux)
 
-Download the latest package and execute it. For Windows, you will also need visual C++ runtime 2015-2022 and for Linux, you will need Nodegui installed.
+Download the latest package and execute it. For Windows, you will also need visual C++ runtime 2015-2022 and for Linux, you will need to have Nodegui installed and execute MH-Pointers-Tool via the terminal using a command similar to this:
+```
+sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./MH-Pointers-Tool
+```
 
 ## Building from source
 
@@ -189,10 +192,10 @@ sudo npm start
 sudo npx nodegui-packer --init MH-Pointers-Tool
 sudo npx nodegui-packer --pack dist
 ```
-If the AppRun file doesn't work, do this:
+If the AppRun doesn't work, do this:
 1) Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool
 2) Open qt.conf
-3) Change "Plugins: = plugins" to: "Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins"
+3) Change "Plugins: = plugins" to<br />"Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins" (if you have Nodegui installed in another path use that instead)
 
 Ubuntu (tested on 22.04 Jammy):
 ```
@@ -209,6 +212,11 @@ sudo npm install
 sudo npm start
 sudo npx nodegui-packer --init MH-Pointers-Tool
 sudo npx nodegui-packer --pack dist
+```
+If AppRun doesn't work, do this:
+1) Open the terminal and type
+```
+2) sudo QT_PLUGIN_PATH=/usr/local/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
 
 ## Special Thanks
