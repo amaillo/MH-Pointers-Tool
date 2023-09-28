@@ -190,13 +190,16 @@ sudo npx nodegui-packer --init MH-Pointers-Tool
 sudo npx nodegui-packer --pack dist
 ```
 If the AppRun file doesn't work, do this:
-Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool and change "plugins" in qt.conf to: /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins
+1) Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool
+2) Open qt.conf
+3) Change "Plugins: = plugins" to: "Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins"
 
 Ubuntu (tested on 22.04 Jammy):
 ```
 sudo apt-get update
 sudo apt install -y git
 sudo apt install -y cmake
+sudo apt install libfuse2
 sudo apt install npm
 sudo npm install -g n
 sudo n latest
