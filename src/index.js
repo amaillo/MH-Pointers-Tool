@@ -25,11 +25,11 @@ const {
   QButtonGroup,
   QRadioButton,
   QProgressDialog,
-  QFont,
-  QFontDatabase
+  QFont
 
 } = require("@nodegui/nodegui");
 
+const Os = require ('os')
 const fs = require('fs')
 const path = require('path')
 const EncodingModule = require('encoding-japanese');
@@ -5652,8 +5652,14 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
     let mimeData = dropEvent.mimeData();
     let urls = mimeData.urls();
     for (let url of urls) {
-      selectedFile = url.toString().replace("file:///","");
-      start()
+
+      if(Os.platform()==="linux"){
+        selectedFile = url.toString().replace("file://","");
+        start()
+      }else{
+        selectedFile = url.toString().replace("file:///","");
+        start()
+      }
     }
   }
 });
