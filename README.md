@@ -233,7 +233,7 @@ If you have NodeGui installed in another path use that path instead)
 **Ubuntu**
 1) Open the terminal and type:
 ```
-2) sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
+sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
 If you have NodeGui installed in another path use that path instead.
 
