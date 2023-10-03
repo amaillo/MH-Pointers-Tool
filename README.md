@@ -147,24 +147,30 @@ Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br />
 
 The first main pointer is CC (204 in decimals), and points to 30 1F (7984), 204+7984 = 8188 = 1FFC, the value in 1FFC is null (00) but by using 31 1F (7985) the next value is a string: 80 50 (is １).
 
-To use this feature will be required an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last group of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
+This feature will require an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last group of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
 
-Additionally, for MHP3rd, there were some particular files that needed another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
+Additionally, for MHP3rd, some particular files needed another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
 
-After filling in the required fields, by continuing a new window will appear. Here the user must manually select the pointer(s) that will be used. After that, a .pt (Pointers Tables) file will be created in 'MH-Pointers-Tool/Pointers Tables'. In the .pt file is where all the data related to a Pointers Table is saved, after being created will be loaded automatically but it can also be loaded manually by selecting Menu>Load Pointers Table.
+After filling in the required fields, by continuing a new window will appear. Here the user must manually select the pointer(s) that will be used. After that, a .pt (Pointers Tables) file will be created in 'MH-Pointers-Tool/Pointers Tables'. In the .pt file is where all the data related to a Pointers Table is saved, after being made will be loaded automatically but it can also be loaded manually by selecting Menu>Load Pointers Table.
 
 ## Installation (Windows and Linux)
 
-Download the latest package and execute it. For Windows, you will also need visual C++ runtime 2015-2022 and for Linux, you will need to have Nodegui installed and execute MH-Pointers-Tool via the terminal using a command similar to this:
+Download the latest package and execute it.
+
+For **Windows**, you will also need visual C++ runtime 2015-2022.
+
+For **Linux**, you will also need NodeGui, then execute AppRun via the terminal using a command similar to this:
 ```
-sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./MH-Pointers-Tool
+sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
 
 ## Building from source
 
 ### Windows (tested on Windows 11)
 
-1) Download and install Git, NodeJs 19.8.1 or latest, and Cmake. Note, that older versions (16.xx-18.xx) could need files from visual studio, in that case, install 'windows-build-tools' or visual studio.
+1) Download and install Git, NodeJs 19.8.1 or latest, and Cmake.
+
+Note: older NodeJs versions (16.xx-18.xx) could need files from Visual Studio, in that case, install 'windows-build-tools' or Visual Studio.
 
 2) Open gitbash and type:
 
@@ -173,8 +179,6 @@ git clone https://github.com/amaillo/MH-Pointers-Tool.git
 cd MH-Pointers-Tool
 npm install
 npm start
-npx nodegui-packer --init MH-Pointers-Tool
-npx nodegui-packer --pack dist
 ```
 
 ### Linux
@@ -189,13 +193,11 @@ sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
 sudo cd usr/lib/node_modules/MH-Pointers-Tool
 sudo npm install
 sudo npm start
-sudo npx nodegui-packer --init MH-Pointers-Tool
-sudo npx nodegui-packer --pack dist
 ```
 If the AppRun doesn't work, do this:
 1) Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool
 2) Open qt.conf
-3) Change "Plugins: = plugins" to<br />"Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins" (if you have Nodegui installed in another path use that instead)
+3) Change "Plugins: = plugins" to<br />"Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins" (if you have NodeGui installed in another path use that path instead)
 
 Ubuntu (tested on 22.04 Jammy):
 ```
@@ -210,13 +212,21 @@ sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
 cd ~/MH-Pointers-Tool
 sudo npm install
 sudo npm start
-sudo npx nodegui-packer --init MH-Pointers-Tool
-sudo npx nodegui-packer --pack dist
 ```
 If AppRun doesn't work, do this:
-1) Open the terminal and type
+1) Open the terminal and type:
 ```
-2) sudo QT_PLUGIN_PATH=/usr/local/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
+2) sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
+```
+Note: if you have NodeGui installed in another path use that path instead.
+
+To pack it, first type the following command just one time:
+```
+npx nodegui-packer --init MH-Pointers-Tool
+```
+Then type the following to get the executable:
+```
+npx nodegui-packer --pack dist
 ```
 
 ## Special Thanks
