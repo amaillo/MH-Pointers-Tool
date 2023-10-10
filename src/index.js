@@ -2082,7 +2082,7 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
       errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n").replaceAll("[CHECK]","")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
-
+      errorMessageBox.setDetailedText("Task completed.")
       if(endReached===true){
 
         return
@@ -2094,7 +2094,7 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
       errorMessageBox.setDetailedText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
-
+      errorMessageBox.setDetailedText("Task completed.")
       if(endReached===true){
 
         return
@@ -2106,7 +2106,7 @@ async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endRe
       errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
-      
+      errorMessageBox.setDetailedText("Task completed.")
       if(endReached===true){
 
         return
@@ -5590,6 +5590,7 @@ let errorMessageButton = new QPushButton()
 errorMessageButton.setInlineStyle(`
 
 `)
+errorMessageBox.setDetailedText("Task completed.")
 errorMessageBox.addButton(errorMessageButton)
 
 fileDialog.setFileMode(0)
