@@ -232,6 +232,7 @@ function saveAndPrepare(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -253,6 +254,7 @@ function saveAndPrepare(){
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
       }else{
+        console.log("Not valid configuration, skiping...")
         skipThisSection=true
       }
     return
@@ -265,6 +267,7 @@ function saveAndPrepare(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -277,6 +280,7 @@ function saveAndPrepare(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -297,6 +301,7 @@ function saveAndPrepare(){
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
       }else{
+        console.log("Not valid configuration, skiping...")
         skipThisSection=true
       }
       return
@@ -309,6 +314,7 @@ function saveAndPrepare(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -321,6 +327,7 @@ function saveAndPrepare(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -531,6 +538,7 @@ function saveAndPrepare2(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -553,11 +561,12 @@ function saveAndPrepare2(){
       errorMessageBox.setText("At least one string address is too big for this file x_x")
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
-      return
+
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
-
+    return
   }else if(string2AddressDecimal<string1AddressDecimal){
 
     if(specialMode===false){
@@ -566,6 +575,7 @@ function saveAndPrepare2(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -578,6 +588,7 @@ function saveAndPrepare2(){
       errorMessageButton.setText("                                                Ok                                              ")
       errorMessageBox.exec()
     }else{
+      console.log("Not valid configuration, skiping...")
       skipThisSection=true
     }
     return
@@ -1546,13 +1557,13 @@ async function csvTranslation(options){
   csvTranslationDialog.setWindowTitle("Select one translation option")
 
   const csvTranslationForThisSection = new QPushButton()
-  const csvTranslationForThisPT = new QPushButton()
+  const csvTranslationForAllSections = new QPushButton()
 
   csvTranslationForThisSection.setText("Strings in this section")
-  csvTranslationForThisPT.setText("Strings in all sections")
+  csvTranslationForAllSections.setText("Strings in all sections")
 
   csvTranslationRowLayout.addWidget(csvTranslationForThisSection)
-  csvTranslationRowLayout.addWidget(csvTranslationForThisPT)
+  csvTranslationRowLayout.addWidget(csvTranslationForAllSections)
 
   csvTranslationForThisSection.addEventListener("clicked", function(){
     csvTranslationDialog.close()
@@ -1568,7 +1579,7 @@ async function csvTranslation(options){
     csvTranslationCanceled = false
   })
 
-  csvTranslationForThisPT.addEventListener("clicked", function(){
+  csvTranslationForAllSections.addEventListener("clicked", function(){
     csvTranslationDialog.close()
     let selectedCsv = csvSelection()
 
