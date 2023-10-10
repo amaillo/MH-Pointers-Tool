@@ -215,7 +215,7 @@ function start(){
 //then does the same for the text in the file (extractedStrings), add those to the listWidget and also
 //transform the encoded text to UTF8. Additionally saves a copy of extractedStrings to use it as reference to know
 //the amount of space that never must be surpassed.
-function saveAndPrepare(tableMode){
+function saveAndPrepare(){
 
   if(  firstStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && lastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
@@ -235,6 +235,7 @@ function saveAndPrepare(tableMode){
       skipThisSection=true
     }
     return
+    
   }
 
   let pointer1Address = firstPointerAddressLineEdit.text()
@@ -245,28 +246,42 @@ function saveAndPrepare(tableMode){
 
   if(pointer1AddressDecimal>currentContent.length ||
     pointer2AddressDecimal>currentContent.length){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("At least one pointer address is too big for this file x_x")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+
+      if(specialMode===false){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("At least one pointer address is too big for this file x_x")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }else{
+        skipThisSection=true
+      }
     return
 
   }else if(pointer2AddressDecimal<pointer1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Invalid pointers scheme, the first pointer address\nis greater than the first one")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid pointers scheme, the first pointer address\nis greater than the first one")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
 
   }else if(pointer2AddressDecimal===pointer1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Invalid pointer addresses, same addresses")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid pointer addresses, same addresses")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
 
   }
-
   let string1Address = firstStringAddressLineEdit.text()
   let string2Address = lastStringAddressLineEdit.text()
 
@@ -276,26 +291,40 @@ function saveAndPrepare(tableMode){
   if(string1AddressDecimal>currentContent.length ||
     string2AddressDecimal>currentContent.length){
 
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("At least one string address is too big for this file x_x")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
+      if(specialMode===false){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("At least one string address is too big for this file x_x")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }else{
+        skipThisSection=true
+      }
       return
 
   }else if(string2AddressDecimal<string1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
 
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
+
   }else if(string2AddressDecimal===string1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Invalid string addresses, same addresses")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
 
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid string addresses, same addresses")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
+
   }
 
   setDefaultValues(1)
@@ -530,17 +559,27 @@ function saveAndPrepare2(){
     }
 
   }else if(string2AddressDecimal<string1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-  errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
 
   }else if(string2AddressDecimal===string1AddressDecimal){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Invalid string addresses, same addresses")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+
+    if(specialMode===false){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Invalid string addresses, same addresses")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      skipThisSection=true
+    }
     return
     
   }
