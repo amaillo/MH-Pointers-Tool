@@ -2153,7 +2153,7 @@ function exportAllSelection(){
   exportAllSelectionDialog.setModal(true)
 
   exportAllSelectionDialog.setWindowTitle("Select one export option")
-  exportAllCheckButton.setText("Add Section name")
+  exportAllCheckButton.setText("Add section name")
   exportAllCheckButton.setCheckState(2)
   exportAllCheckButton.setToolTip("It will add the section name of each group of data.")
 
@@ -5452,7 +5452,7 @@ pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
       pointerViewerListQWidgetText3.setText(`${counter}`)
       pointerViewerListQWidgetText3.setInlineStyle(`
       color:black;
-      margin-left:30px;
+      margin-left:35px;
       `)
       pointerViewerListQWidgetLayout3.addWidget(pointerViewerListQWidgetText3)
       pointersViewerForSharedPointersListWidget.setItemWidget(pointersViewerForSharedPointersListWidget.item(k+1),pointerViewerListQWidget3)
@@ -5716,25 +5716,33 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
 });
 
 //Global font---------------------------------------------
-const appFont = new QFont()
+// const appFont = new QFont()
 
-if(appFont.family()==="Segoe UI"){
+// if(appFont.family()==="Segoe UI"){
 
-}else if(appFont.family()==="Ubuntu"){
+// }
+// else if(appFont.family()==="Ubuntu"){
 
-  globalQApplication.setStyleSheet(`
-  * {
-  font-size:13px;
-  }
-  `)
-}else{
+//   globalQApplication.setStyleSheet(`
+//   * {
+//   font-size:13px;
+//   }
+//   `)
+// }
+// else{
 
-  globalQApplication.setStyleSheet(`
-  * {
-  font-size:12px;
-  }
-  `)
+//   globalQApplication.setStyleSheet(`
+//   * {
+//   font-size:12px;
+//   }
+//   `)
+// }
+
+globalQApplication.setStyleSheet(`
+* {
+font-size:12px;
 }
+`)
 
 //CS:Show window------------------------------------------
 win.setCentralWidget(rootView);
