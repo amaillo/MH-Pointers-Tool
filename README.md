@@ -149,7 +149,7 @@ The first main pointer is CC (204 in decimals), and points to 30 1F (7984), 204+
 
 This feature will require an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last group of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
 
-Additionally, for Monster Hunter Portable 3rd, some particular files need another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
+Additionally, for **Monster Hunter Portable 3rd**, some particular files need another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
 
 After filling in the required fields, by continuing a new window will appear. Here the user must manually select the pointer(s) that will be used. After that, a .pt (Pointers Tables) file will be created in 'MH-Pointers-Tool/Pointers Tables'. In the .pt file is where all the data related to a Pointers Table is saved, after being made will be loaded automatically but it can also be loaded manually by selecting Menu>Load Pointers Table.
 
