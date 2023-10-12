@@ -1,6 +1,6 @@
 {
   "name": "mh-pointers-tool",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A modding tool to edit strings in old monster hunter games, and hopefully other games too.",
   "main": "index.js",
   "scripts": {
