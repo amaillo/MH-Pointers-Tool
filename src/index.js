@@ -3397,10 +3397,10 @@ function getPointersTableData(){
     })
 
     createPointersDialogStep2.setWindowTitle('Index Pointers Selector')
-    createPointersDialogStep2.setFixedSize(260,400)
+    createPointersDialogStep2.setFixedSize(262,400)
     
     const createPointersDialogStep2Label = new QLabel()
-    createPointersDialogStep2Label.setText("Select the pointers of the Index\nTable")
+    createPointersDialogStep2Label.setText("Select the pointers of the Index Table")
     
     const createPointersDialogStep2Layout = new QBoxLayout(2)
     createPointersDialogStep2.setLayout(createPointersDialogStep2Layout)
@@ -3683,6 +3683,10 @@ if(getOrganizedSections()===1){
 }
 getGlobalExtractedStrings()
 i=0
+
+if(fs.existsSync("./Pointers Tables/")===false){
+fs.mkdirSync("./Pointers Tables/")
+}
 
 saveTableConfiguration(name)
 
