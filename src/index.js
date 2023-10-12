@@ -3726,7 +3726,7 @@ function loadPointersTable(pathToPTFile){
 
     ptFileDialog.setFileMode(1)
     ptFileDialog.setWindowTitle("Choose a .pt file")
-    ptFileDialog.setAcceptMode(1)
+    ptFileDialog.setAcceptMode(0)
     ptFileDialog.setNameFilter("*.pt")
     ptFileDialog.exec();
 
