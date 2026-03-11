@@ -19,15 +19,15 @@ const {
   WidgetEventTypes,
   QDropEvent,
   QApplication,
-  QClipboardMode,
   QDialog,
   QIcon,
   QButtonGroup,
   QRadioButton,
   QProgressDialog,
-  QFont
 
 } = require("@nodegui/nodegui");
+
+import { hexView,currentEncoding,hexViewBuffer, setUTF8EncodingAndRender, setShiftJISEncodingAndRender,shutdownHexView,toHexadecimal} from "./hexView";
 
 const Os = require ('os')
 const fs = require('fs')
@@ -49,7 +49,7 @@ let string2AddressDecimal = ""
 let pointer1AddressDecimal= ""
 let pointer2AddressDecimal = ""
 let extractedStringsOLD = ""
-let numSpaceLeft = 0
+let spaceLeftInSection = 0
 let addressOfEachString = []
 let addressOfEachPointer = []
 let pointersHexValues = []
@@ -59,11 +59,10 @@ let extractedPointersIn4Non0= []
 let extractedPointers = ""
 let oldPointersHexValues = []
 let savedString = ""
-let projectsConfHexArr = []
 let oldRawString = ""
 let oldSelectedString = -1
-let sharedPointers = 0
-let oldMatchedSharedPointers = []
+let quantityOfSharedPointers = 0
+let itemPositionOfSharedPointers = []
 let sectionNameHeader= "Section name"
 let hiddenPointers = 0
 let selectedTablePointers = []
@@ -76,10 +75,10 @@ let tableEndPointerStartStringFileAddresses = []
 let tableEndStringFileAddresses = []
 let sectionedCurrentContent = []
 let selectedPTFile = ""
-let pointersTableMode = false
+let pointersTableModeON = false
 let csvTranslationMode = false
-let specialMode = false
-let modeVariable = 0
+let csvInfoGatheringMode = false
+let sectionPaginationPointerFlag = 0
 let pointersTableModeSettingsArr = []
 let currentTableContent = []
 let organizedSections = []
@@ -90,18 +89,20 @@ let shiftJISEncoding = false
 let UTF8Encoding = true
 let originalExtractedStringsLength = 0
 let globalOffset = 0
-let stopProcess = false
-let skipThisSection = false
+let stopCsvInfoGatheringMode = false
+let notCorrectDataSkipThisSection = false
 let postLastStringAddress
 let globalExtractedStrings = []
 let globalAddressOfEachString = []
 let oldcurrentContentLength
 let timer
 let csvTranslationCanceled = false
+const mibListObjsData = []
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
   matchSearch = []
+  let i = 0
   if (textToSearch != ""){
     for(i=0;i<listWidget.count();++i){
       stringsArr[i] = listWidget.item(i).text()
@@ -110,12 +111,9 @@ function saveItemsInArr(textToSearch){
   i = 0
 
   while(i < listWidget.count()){
-
     if(stringsArr[i].toLowerCase().includes(textToSearch.toLowerCase()) ===true){
-
       matchSearch[i] = i
     }
-
     i=i+1;
   }
 }
@@ -125,7 +123,6 @@ function saveItemsInArr(textToSearch){
 function setNextItem(){
 
   while(searchSet < matchSearch.length){
-
     match = false;
  
     if(matchSearch[searchSet] != undefined){
@@ -148,17 +145,13 @@ function setNextItem(){
         pointerValuesLabel.setText(`Pointer HexValues: ${pointersHexValues[listWidget.currentRow()].toString(16).toUpperCase()}`)
 
       }
-
       match = true
     }
       searchSet = searchSet+1
-
     if (match===true){
-
       break
     }
   }
-
   if(searchSet===matchSearch.length){
     searchSet = 0
   }
@@ -166,25 +159,29 @@ function setNextItem(){
 
 //Open a file dialog to choose a file and save it path in selectedFile.
 function loadFile() {
+  const currentPath = filePathQLineEditRead.text()?filePathQLineEditRead.text():""
+  const chooseFileDialog = new QFileDialog(win,undefined,currentPath);
+  chooseFileDialog.setFileMode(0)
 
   let goBack = true
     
-  fileDialog.addEventListener("fileSelected",function(){
+  chooseFileDialog.addEventListener("fileSelected",function(file){
+    if(chooseFileDialog.selectedFiles().length!=0&&
+    fs.lstatSync(file).isDirectory()===false){
 
-      if(fileDialog.selectedFiles().length!=0&&
-        fs.lstatSync(fileDialog.selectedFiles()[0]).isDirectory()===false){
+      selectedFile = file
+      start()
+      goBack = false
+    }else{
+      selectedFile = filePathQLineEditRead.text()
+      start()
+      return
+    }
+    const encoding = UTF8Encoding?"UTF8":"SJIS"
+    hexView(selectedFile,encoding)
+  })
 
-          selectedFile = fileDialog.selectedFiles();
-          start()
-        goBack = false
-      }else{
-        selectedFile = filePathQLineEditRead.text()
-        start()
-        return
-      }
-    })
-
-  fileDialog.exec();
+  chooseFileDialog.exec();
 
   if(goBack===true){
     return 1
@@ -204,7 +201,7 @@ function start(){
     mainMenuAction3.setEnabled(true)
   }
 
-  if(pointersTableMode===true){
+  if(pointersTableModeON===true){
     mainMenuAction3.setEnabled(false)
   }
 }
@@ -215,608 +212,344 @@ function start(){
 //then does the same for the text in the file (extractedStrings), add those to the listWidget and also
 //transform the encoded text to UTF8. Additionally saves a copy of extractedStrings to use it as reference to know
 //the amount of space that never must be surpassed.
-function saveAndPrepare(){
+function saveAndPrepare(doASave) {
 
-  if(  firstStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && lastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && firstPointerAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && lastPointerAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && fs.existsSync(`${selectedFile}`) === true){
-
-    console.log("Both strings and pointers address are in a correct hex format!")
-
-  }else{
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
-    }
-    return
-    
+  if (!validateHexAddresses() || !fs.existsSync(selectedFile)) {
+    handleValidationError();
+    return;
   }
 
-  let pointer1Address = firstPointerAddressLineEdit.text()
-  let pointer2Address = lastPointerAddressLineEdit.text()
+  const pointer1Addr = firstPointerAddressLineEdit.text();
+  const pointer2Addr = lastPointerAddressLineEdit.text();
+  pointer1AddressDecimal = parseInt(pointer1Addr, 16);
+  pointer2AddressDecimal = parseInt(pointer2Addr, 16);
 
-  pointer1AddressDecimal= parseInt(pointer1Address,16)
-  pointer2AddressDecimal = parseInt(pointer2Address,16)
+  if (!validatePointerAddresses()) return;
 
-  if(pointer1AddressDecimal>currentContent.length ||
-    pointer2AddressDecimal>currentContent.length){
+  const string1Addr = firstStringAddressLineEdit.text();
+  const string2Addr = lastStringAddressLineEdit.text();
+  string1AddressDecimal = parseInt(string1Addr, 16);
+  string2AddressDecimal = parseInt(string2Addr, 16);
 
-      if(specialMode===false){
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText("At least one pointer address is too big for this file x_x")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-      }else{
-        console.log("Not valid configuration, skiping...")
-        skipThisSection=true
-      }
-    return
+  if (!validateStringAddresses()) return;
 
-  }else if(pointer2AddressDecimal<pointer1AddressDecimal){
+  setDefaultValues(1);
+  enablePointerControls(true);
 
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid pointers scheme, the first pointer address\nis greater than the first one")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
-    }
-    return
+  processPointers();
 
-  }else if(pointer2AddressDecimal===pointer1AddressDecimal){
+  processStrings();
+  
+  executeFinalFunctions(doASave);
+  listWidget.setCurrentRow(0)
+}
 
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid pointer addresses, same addresses")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
-    }
-    return
-
-  }
-  let string1Address = firstStringAddressLineEdit.text()
-  let string2Address = lastStringAddressLineEdit.text()
-
-  string1AddressDecimal= parseInt(string1Address,16)
-  string2AddressDecimal = parseInt(string2Address,16)
-
-  if(string1AddressDecimal>currentContent.length ||
-    string2AddressDecimal>currentContent.length){
-
-      if(specialMode===false){
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText("At least one string address is too big for this file x_x")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-      }else{
-        console.log("Not valid configuration, skiping...")
-        skipThisSection=true
-      }
-      return
-
-  }else if(string2AddressDecimal<string1AddressDecimal){
-
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
-    }
-    return
-
-  }else if(string2AddressDecimal===string1AddressDecimal){
-
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid string addresses, same addresses")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
-    }
-    return
-
+//Similar to saveAndPrepare but only is used when no pointers are given
+function saveAndPreparePointerless(doASave) {
+  if (!validateHexAddresses(false) || !fs.existsSync(selectedFile)) {
+    handleValidationError();
+    return;
   }
 
-  setDefaultValues(1)
+  const string1Addr = firstStringAddressLineEdit.text();
+  const string2Addr = lastStringAddressLineEdit.text();
+  string1AddressDecimal = parseInt(string1Addr, 16);
+  string2AddressDecimal = parseInt(string2Addr, 16);
 
-  pointersViewerButtonToHide00.setEnabled(true)
-  csvButton.setEnabled(true)
-  csvButton2.setEnabled(true)
-  exportAllButton.setEnabled(true)
-  pointersEditorRealocateButton.setEnabled(true)
-  pointersEditorSaveButton.setEnabled(true)
-  pointersEditorLabel.setEnabled(true)
-  pointersEditor.setEnabled(true)
-  pointersViewerForSharedPointersListWidget.setEnabled(true)
-  bigEndian.setEnabled(false)
+  if (!validateStringAddresses()) return;
 
-  extractedPointers = currentContent.slice(pointer1AddressDecimal,pointer2AddressDecimal)
+  setDefaultValues(2);
+  enablePointerControls(false);
 
-  let i = 0
+  processStrings();
 
-  start()
+  executeFinalFunctions(doASave, true);
+}
 
-  if(listWidget.item(i) != undefined) {
-    listWidget.clear()
-    pointersViewerlistWidget.clear()
-    stringEditorTextEdit.setPlainText("")
-  }
-
-  hiddenPointers=0
-  let k =0
-  while(Number(extractedPointers.length)>1){
-    extractedPointersIn4[i] = extractedPointers.slice(0,4)
-
-    if(extractedPointers.slice(0,4).toString("hex") != "00000000"){
-      extractedPointersIn4Non0[k] = extractedPointers.slice(0,4)
-      k=k+1
-    }
-    extractedPointers = extractedPointers.slice(4)
-
-    
-    const extractedItem = new QListWidgetItem()
-    extractedItem.setText(`${extractedPointersIn4[i].toString("hex").toUpperCase()}`)
-    
-    pointersViewerlistWidget.addItem(extractedItem)
-
-    if(extractedItem.text()==="00000000"&&pointersViewerButtonToHide00.isChecked()===true){
-      extractedItem.setHidden(true)
-      hiddenPointers = hiddenPointers+1;
-    }
-
-    i = i+1;
-  }
-
-  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${sharedPointers})`)
-
-  extractedStrings = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
-  let extractedStringsTemp = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
-
-
-  i=0;
-
-
-  rawStrings = [] //in hex, contains all 00
-  textStrings = [] //in Unicode, without all the 00
-  let phase =0;
-  let tempString = []
-  k = 0
-
-  if(pointersTableMode===false){
-    loop1:
-    while(Number(extractedStringsTemp.length)!=0){
-      k =0;
-      phase = 0;
-  
-      loop2:
-      while(phase<3){
-  
-        if(extractedStringsTemp[k] === 0){
-        phase = 1
-        
-        }else if (phase === 1 && extractedStringsTemp[k] !=0){
-  
-          tempString = extractedStringsTemp.slice(0,k)
-          extractedStringsTemp = extractedStringsTemp.slice(k)
-  
-        break loop2
-        }
-        k=k+1;
-        if(extractedStringsTemp[k] === undefined){
-          
-          rawStrings[i] = extractedStringsTemp 
-          break loop1
-        }
-      }
-  
-      rawStrings[i] = tempString
-      i = i+1;
-    }
-  }else if(pointersTableMode===true){
-
-    k =0;
-    while (Number(extractedStringsTemp.length)!=0){
-      if(extractedStringsTemp[k] === 0){
-        rawStrings[i] = extractedStringsTemp.slice(0,k+1)
-        extractedStringsTemp = extractedStringsTemp.slice(k+1)
-
-        k =0
-        i=i+1
-      }if(extractedStringsTemp[k]!=0){
-        break
-      }
-    }
-    
-    loop1:
-    while(Number(extractedStringsTemp.length)!=0){
-      k =0;
-      phase = 0;
-  
-      loop2:
-      while(phase<3){
-
-        if(extractedStringsTemp[k] === 0){
-        phase = 1
-
-        
-        }else if (phase === 1 && extractedStringsTemp[k] !=0){
-  
-  
-          tempString = extractedStringsTemp.slice(0,k)
-          extractedStringsTemp = extractedStringsTemp.slice(k)
-      
-        break loop2
-        }
-        k=k+1;
-        if(extractedStringsTemp[k] === undefined){
-
-          rawStrings[i] = extractedStringsTemp 
-
-          break loop1
-        }
-      }
-
-      rawStrings[i] = tempString
-      i = i+1;
-    }
-  }
-
-  i=0;
-
-  while(rawStrings[i] != undefined){
-
-    if(shiftJISEncoding===true){
-      const conversion = EncodingModule.convert(rawStrings[i], {
-        to: 'UNICODE',
-        from: 'SJIS',
-        });
-    
-        const convertedString = EncodingModule.codeToString(conversion)
-        const extractedItem2 = new QListWidgetItem()
-        extractedItem2.setText(`${convertedString}`)
-        listWidget.addItem(extractedItem2)
-    
-        i = i+1;
-    }else if(UTF8Encoding===true){
- 
-        const extractedItem2 = new QListWidgetItem()
-        extractedItem2.setText(`${rawStrings[i]}`)
-        listWidget.addItem(extractedItem2)
-
-        i = i+1;
-    }
-
-  }
-
-  extractedStringsOLD = Buffer.concat(rawStrings)
-  originalExtractedStringsLength= extractedStringsOLD.length
-
-  stringAddressFunc(currentContent)
-  spaceLeftFunc(extractedStrings)
-  pointerAddressFunc(currentContent)
-  hexValuesFunc(currentContent)
-  pointerAdjuster(currentContent)
-
-  if(pointersTableMode===true){
-    pointersTableUpdater()
-  }else{
-    saveConfiguration()
+//Handles validation error message
+function handleValidationError(checkPointers = true) {
+  const errorMessage = checkPointers ? 
+    "Not correct hex format or invalid file path, aborting..." :
+    "Not correct hex format for strings or invalid file path, aborting...";
+  if (csvInfoGatheringMode === false) {
+    errorMessageBox.setWindowTitle("Error");
+    errorMessageBox.setText(errorMessage);
+    errorMessageButton.setText("OK".padStart(40).padEnd(40));
+    errorMessageBox.exec();
+  } else {
+    console.log("Not valid configuration, skipping...");
+    notCorrectDataSkipThisSection = true;
   }
 }
 
-//Similar to saveAndPrepare() but don't uses pointers addresses.
-function saveAndPrepare2(){
+//Check if the hex format is correct with regex
+function validateHexAddresses(checkPointers = true) {
+  const hexRegex = /^[0-9A-F]{1,6}$/i;
+  const validations = [
+    firstStringAddressLineEdit.text().match(hexRegex),
+    lastStringAddressLineEdit.text().match(hexRegex),
+    checkPointers ? firstPointerAddressLineEdit.text().match(hexRegex) : true,
+    checkPointers ? lastPointerAddressLineEdit.text().match(hexRegex) : true
+  ];
+  return validations.every(Boolean);
+}
 
-  if(firstStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && lastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && fs.existsSync(`${selectedFile}`) === true){
-      console.log("Both string address are in a correct hex format!")
+//Check if the pointers addresses are ok
+function validatePointerAddresses() {
+  if (pointer1AddressDecimal > currentContent.length || 
+    pointer2AddressDecimal > currentContent.length) {
+    return handleAddressError("At least one pointer address is too big for this file x_x");
+  }
+  if (pointer2AddressDecimal <= pointer1AddressDecimal) {
+    const msg = pointer2AddressDecimal === pointer1AddressDecimal ?
+      "Invalid pointer addresses, same addresses" :
+      "Invalid pointers scheme, the last pointer address\nis greater than the first one";
+    return handleAddressError(msg);
+  }
+  return true;
+}
+
+//Check if the strings addresses are ok
+function validateStringAddresses() {
+  if (string1AddressDecimal > currentContent.length || 
+    string2AddressDecimal > currentContent.length) {
+    return handleAddressError("At least one string address is too big for this file x_x");
+  }
+  if (string2AddressDecimal <= string1AddressDecimal) {
+    const msg = string2AddressDecimal === string1AddressDecimal ?
+      "Invalid string addresses, same addresses" :
+      "Invalid string scheme, the last string address\nis greater than the first one";
+    return handleAddressError(msg);
+  }
+  return true;
+}
+
+//Handles validation error when address is not correct
+function handleAddressError(message) {
+  if (csvInfoGatheringMode === false) {
+    errorMessageBox.setWindowTitle("Error");
+    errorMessageBox.setText(message);
+    errorMessageButton.setText("OK".padStart(40).padEnd(40));
+    errorMessageBox.exec();
+  } else {
+    console.log("Not valid configuration, skipping...");
+    notCorrectDataSkipThisSection = true;
+  }
+  return false;
+}
+
+// Get pointers using the given addresses, separate them into groups of 4 bytes, and add them to the viewer
+function processPointers() {
+  extractedPointers = currentContent.slice(pointer1AddressDecimal, pointer2AddressDecimal);
+  pointersViewerFull.clear();
+  hiddenPointers = 0;
+  let nonZeroIndex = 0;
+
+  for (let i = 0; extractedPointers.length > 1; i++) {
+    const pointerSlice = extractedPointers.slice(0, 4);
+    extractedPointersIn4[i] = pointerSlice;
+
+    if (pointerSlice.toString("hex") !== "00000000") {
+      extractedPointersIn4Non0[nonZeroIndex++] = pointerSlice;
     }
 
-  else{
+    const item = new QListWidgetItem(pointerSlice.toString("hex").toUpperCase());
+    pointersViewerFull.addItem(item);
 
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Not correct hex format or invalid file path, aborting...")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
+    if (item.text() === "00000000" && pointersViewerButtonToHide00.isChecked()) {
+      item.setHidden(true);
+      hiddenPointers++;
     }
-    return
+
+    extractedPointers = extractedPointers.slice(4);
   }
 
+  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${quantityOfSharedPointers})`);
+}
 
-  let i = 0
+//Extracts null-terminated strings between the specified addresses,
+//parses them (handling consecutive nulls), converts encoding if needed,
+//and displays them in the string list widget.
+function processStrings() {
+  extractedStrings = currentContent.slice(string1AddressDecimal, string2AddressDecimal);
+  let tempStrings = extractedStrings;
+  rawStrings = [];
+  let i = 0;
 
-  let string1Address = firstStringAddressLineEdit.text()
-  let string2Address = lastStringAddressLineEdit.text()
-
-  string1AddressDecimal= parseInt(string1Address,16)
-  string2AddressDecimal = parseInt(string2Address,16)
-
-  if(string1AddressDecimal>currentContent.length ||
-  string2AddressDecimal>currentContent.length){
-   
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("At least one string address is too big for this file x_x")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
+  while (tempStrings.length > 0) {
+    let k = 0;
+    while (k < tempStrings.length && tempStrings[k] !== 0) {
+      k++;
     }
-    return
-  }else if(string2AddressDecimal<string1AddressDecimal){
 
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid string scheme, the first string address\nis greater than the first one")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
+    //Find the next non 00 byte after the first one
+    let nextNonZero = k;
+    while (nextNonZero < tempStrings.length && tempStrings[nextNonZero] === 0) {
+      nextNonZero++;
     }
-    return
 
-  }else if(string2AddressDecimal===string1AddressDecimal){
-
-    if(specialMode===false){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText("Invalid string addresses, same addresses")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-    }else{
-      console.log("Not valid configuration, skiping...")
-      skipThisSection=true
+    if (nextNonZero < tempStrings.length) {
+      rawStrings[i++] = tempStrings.slice(0, nextNonZero);
+      tempStrings = tempStrings.slice(nextNonZero);
+    } else {
+      rawStrings[i++] = tempStrings;
+      break;
     }
-    return
+  }
+
+  //Clear and update the string list
+  listWidget.clear();
+  for (let j = 0; j < rawStrings.length; j++) {
+    const text = shiftJISEncoding ? 
+      EncodingModule.codeToString(EncodingModule.convert(rawStrings[j], {to: 'UNICODE', from: 'SJIS'})) :
+      rawStrings[j].toString();
     
+    listWidget.addItem(new QListWidgetItem(text));
   }
 
-  setDefaultValues(2)
-  csvButton.setEnabled(true)
-  csvButton2.setEnabled(true)
-  exportAllButton.setEnabled(true)
-  extractedStrings = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
-  let extractedStringsTemp = currentContent.slice(string1AddressDecimal,string2AddressDecimal)
+  extractedStringsOLD = Buffer.concat(rawStrings);
+  originalExtractedStringsLength = extractedStringsOLD.length;
+}
 
-  i=0;
-  rawStrings = [] //in hex, contains all 00
-  textStrings = [] //in Unicode, without all the 00
-  let phase =0;
-  let tempString = []
-  let k = 0
-
-
-  loop1:
-  while(Number(extractedStringsTemp.length)>1){
-
-    k =0;
-    phase = 0;
-
-    loop2:
-    while(phase<3){
-
-      if(extractedStringsTemp[k] === 0){
-      phase = 1
-
-      }else if (phase === 1 && extractedStringsTemp[k] !=0){
-
-        tempString = extractedStringsTemp.slice(0,k)
-        extractedStringsTemp = extractedStringsTemp.slice(k)
-
-      break loop2
-      }
-      k=k+1;
-
-      if(extractedStringsTemp[k] === undefined){
-        rawStrings[i] = extractedStringsTemp 
-        break loop1
-      }
-    }
-
-    rawStrings[i] = tempString
-    i = i+1;
+//Executes final processing functions based on pointer presence.
+//Handles both pointer and pointerless paths, calculates remaining space,
+//and either updates pointer table or saves configuration.
+function executeFinalFunctions(doASave, isPointerless = false) {
+  if(!isPointerless) {
+    stringAddressFunc(currentContent);
+    pointerAddressFunc();
+    hexValuesFunc();
+    pointerAdjuster(currentContent);
+  }else{
+    stringAddressFuncWithoutPointers(currentContent, string1AddressDecimal, string2AddressDecimal);
   }
-
-  i=0;
-  if(listWidget.item(i) != undefined) {
-    listWidget.clear()
-    stringEditorTextEdit.setPlainText("")
-  }
-  while(rawStrings[i] != undefined){
-
-    if(shiftJISEncoding===true){
-      const conversion = EncodingModule.convert(rawStrings[i], {
-        to: 'UNICODE',
-        from: 'SJIS',
-        });
-    
-        const convertedString = EncodingModule.codeToString(conversion)
-        const extractedItem2 = new QListWidgetItem()
-        extractedItem2.setText(`${convertedString}`)
-        listWidget.addItem(extractedItem2)
-    
-        i = i+1;
-    }else if(UTF8Encoding===true){
   
-        const extractedItem2 = new QListWidgetItem()
-        extractedItem2.setText(`${rawStrings[i]}`)
-        listWidget.addItem(extractedItem2)
-    
-        i = i+1;
+  spaceLeftFunc(extractedStrings);
+  
+  if(pointersTableModeON){
+    pointersTableUpdater();
+  }else{
+    if(doASave) {
+      saveConfiguration();
     }
-
   }
+}
 
-  if(pointersViewerlistWidget.item(0)!=undefined){
-    pointersViewerlistWidget.clear()
+//Enables (or not) pointers to be edited
+function enablePointerControls(enable) {
+  csvButton.setEnabled(true);
+  csvButton2.setEnabled(true);
+  exportAllButton.setEnabled(true);
+  bigEndian.setEnabled(false);
 
-    pointersViewerTitleLabel.setText(`Pointers Viewer (Total) (Shared)`)
-    pointersViewerButtonToHide00.setCheckState(0)
-    pointersViewerButtonToHide00.setEnabled(false)
-  }
-
-  extractedStringsOLD = Buffer.concat(rawStrings)
-  originalExtractedStringsLength= extractedStringsOLD.length
-  stringAddressFuncWithoutPointers(currentContent,string1AddressDecimal,string2AddressDecimal)
-  spaceLeftFunc(extractedStrings)
-  saveConfiguration()
+  pointersViewerButtonToHide00.setEnabled(enable);
+  pointersEditorRealocateButton.setEnabled(enable);
+  pointersEditorSaveButton.setEnabled(enable);
+  pointersEditorLabel.setEnabled(enable);
+  pointersEditor.setEnabled(enable);
+  pointersViewerSpecific.setEnabled(enable);
 }
 
 //Gather all the info to know the offset of each string in the file and in the memory 
 //(the memory one is accurate only if the console uses pointers based in the total lenght of data in the RAM)
 //data = currentContent, basically, the file.
-function stringAddressFunc(data){
+function stringAddressFunc(data) {
 
   let i = string1AddressDecimal;
-  let phase = 0;
+  let phase = data[i] !== 0 ? 1 : 0;
   let k = 0;
-  let firstLetterFound= false
-  //Analyze all the string indexes from currentContent
-  //Saves the address/string index of each string start
+  let firstLetterFound = phase === 1;
+  const endAddress = string2AddressDecimal;
 
-  if(data[i]!=0){
-    phase = 1;
-    firstLetterFound= true
-  }
+  addressOfEachString.length = 0;
+  
+  while (i < endAddress) {
+    const currentByte = data[i];
+    const isNull = currentByte === 0;
 
-  while(i != string2AddressDecimal){
-    
-    if(data[i] != 0 && phase === 1){
-
-      addressOfEachString[k] = i.toString(16).toUpperCase();
-      k=k+1;
-      phase= 2;
-      
-    }else if(data[i] === 0 && phase===2){
-
-      phase = 1
-    }else if(data[i]===0&& phase === 0 &&pointersTableMode===true){
-
-      addressOfEachString[k] = i.toString(16).toUpperCase();
-      k=k+1;
-      
-      if(data[i+1]!=0&&firstLetterFound===false ){
-
-      phase = 1
-      firstLetterFound=true
+    if (!isNull && phase === 1) {
+      addressOfEachString[k++] = i.toString(16).toUpperCase();
+      phase = 2;
+    } 
+    else if (isNull && phase === 2) {
+      phase = 1;
+    }
+    else if (isNull && phase === 0 && pointersTableModeON) {
+      addressOfEachString[k++] = i.toString(16).toUpperCase();
+      if (!firstLetterFound && data[i + 1] !== 0) {
+        phase = 1;
+        firstLetterFound = true;
       }
     }
-
-    i=i+1;
+    i++;
   }
 
-  //[First String Address in decimals]-[X String Address in decimals ]=
-  //Difference
-  //Difference+ [First string address in memory] = X String address in memory!
-
-  //Format:String.
-
-  let firstPointerW = pointersViewerlistWidget.item(0).text()
-
-  if(bigEndian.isChecked()===true){
-
-    addressOfEachStringInMemory[0] = firstPointerW
-
-  }else{
-
-    addressOfEachStringInMemory[0] = firstPointerW.match(/.{1,2}/g).reverse().join('') 
+  //Processing pointers
+  const firstPointerItem = pointersViewerFull.item(0);
+  const firstPointerText = firstPointerItem.text();
+  const isBE = bigEndian.isChecked();
   
-  }
+  addressOfEachStringInMemory[0] = isBE ? 
+  firstPointerText : 
+  reverseHex(firstPointerText);
 
-  let firstPointerValuesInDecimals =""
-  if(bigEndian.isChecked()===true){
-    firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntBE(0,Buffer.from(firstPointerW, "hex").length)
-  }else{
-    firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntLE(0,Buffer.from(firstPointerW, "hex").length)
-  }
+  const firstPointerVal = isBE ?
+  Buffer.from(firstPointerText, "hex").readUIntBE(0, 4):
+  Buffer.from(firstPointerText, "hex").readUIntLE(0, 4);
 
-
-  i = 1;
-  k = 0;
-  //This will be used to update the pointers later
-  pointersHexValues[0] = extractedPointersIn4[0].toString("hex")
-
-
-  while(pointersHexValues[k] != undefined){
-    oldPointersHexValues[k] =  pointersHexValues[k]
-    k=k+1;
-  }
-
-  while(addressOfEachString[i] != undefined){
+  //Calculating differences
+  pointersHexValues[0] = extractedPointersIn4[0].toString("hex");
   
+  oldPointersHexValues = [...pointersHexValues];
 
-    let differenceInDecimals = parseInt(addressOfEachString[i],16)-parseInt(addressOfEachString[0],16)
-    let nextPointerInDecimals = firstPointerValuesInDecimals+differenceInDecimals;
+  const firstAddr = parseInt(addressOfEachString[0], 16);
+  const refHex = extractedPointersIn4[0].toString("hex");
+  const refLength = refHex.length;
+  const padInfo = getPaddingInfo(refHex);
 
-    if(bigEndian.isChecked()===true){
-      pointersHexValues[i] = nextPointerInDecimals.toString(16)
-    }else{
+  for (let idx = 1; idx < addressOfEachString.length; idx++) {
+    const diff = parseInt(addressOfEachString[idx], 16) - firstAddr;
+    let newHex = (firstPointerVal + diff).toString(16);
 
-    pointersHexValues[i] = nextPointerInDecimals.toString(16).padStart(firstPointerW.length, '0').match(/.{1,2}/g).reverse().join('') 
-    
+    if (!isBE) {
+      newHex = padAndReverseHex(newHex, firstPointerText.length);
     }
-    addressOfEachStringInMemory[i] = nextPointerInDecimals.toString(16).toUpperCase()
 
-    k=0
-
-    //Add 00 to the right or left side of pointer.
-    if(pointersHexValues[i].length<extractedPointersIn4[0].toString("hex").length
-    &&extractedPointersIn4[i]!= undefined){
-
-      while(k<Math.trunc(extractedPointersIn4[i].toString("hex").length/2)){
-        let left = false
-        let right = false
-  
-        if(extractedPointersIn4[0].toString("hex")[k] ==="0"){
-          left = true
-        }
-        
-        if(extractedPointersIn4[0].toString("hex")[extractedPointersIn4[0].toString("hex").length-k-1] ==="0"){
-          right = true
-        }
-  
-        if(left === true && right === false){
-          
-          while(pointersHexValues[i].length<extractedPointersIn4[0].toString("hex").length){
-            pointersHexValues[i] =  "0" + pointersHexValues[i]
-          }
-  
-        }else if(left === false && right === true){
-          
-          while(pointersHexValues[i].length<extractedPointersIn4[0].toString("hex").length){
-            pointersHexValues[i] = pointersHexValues[i]+ "0"
-          }
-        }
-  
-        k=k+1
-      }
+    //Padding
+    if (newHex.length < refLength) {
+      newHex = applyPadding(newHex, refLength, padInfo);
     }
-    i=i+1
+
+    pointersHexValues[idx] = newHex;
+    addressOfEachStringInMemory[idx] = (firstPointerVal + diff).toString(16).toUpperCase();
   }
+}
+
+//Reverses the byte order of a hex string (e.g., "AABBCC" -> "CCBBAA")
+function reverseHex(hex) {
+  return hex.match(/.{1,2}/g).reverse().join('');
+}
+
+//Pads a hex string to specified length, then reverses byte order
+function padAndReverseHex(hex, length) {
+  return hex.padStart(length, '0').match(/.{1,2}/g).reverse().join('');
+}
+
+// Checks if a hex string has leading zeros (left) or trailing zeros (right)
+function getPaddingInfo(hex) {
+  let left = false, right = false;
+  for (let i = 0, j = hex.length - 1; i <= j; i++, j--) {
+    if (hex[i] === '0') left = true;
+    if (hex[j] === '0') right = true;
+  }
+  return { left, right };
+}
+
+// Applies padding to left or right based on padding info, or returns unchanged
+function applyPadding(hex, targetLen, { left, right }) {
+  if (left && !right) return hex.padStart(targetLen, '0');
+  if (!left && right) return hex.padEnd(targetLen, '0');
+  return hex;
 }
 
 //Similar to stringAddressFunc()
@@ -849,29 +582,29 @@ function stringAddressFuncWithoutPointers(data,start,end){
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
 //are in the specified section of the file, or the entire file if is a pointers table.
 function spaceLeftFunc(data){
-  numSpaceLeft = 0
+  spaceLeftInSection = 0
   let i = 0
 
-  if(pointersTableMode===false){
+  if(pointersTableModeON===false){
 
     while(data[i] != undefined){
   
       if(data[i] === 0){
-        numSpaceLeft= numSpaceLeft+1
+        spaceLeftInSection= spaceLeftInSection+1
       }
       i=i+1
     }
 
-    numSpaceLeft = numSpaceLeft -addressOfEachString.length
-    spaceLeftLabel.setText(`Space left: ${numSpaceLeft+1}`)
-  }else if(pointersTableMode===true){
+    spaceLeftInSection = spaceLeftInSection -addressOfEachString.length
+    spaceLeftLabel.setText(`Space left: ${spaceLeftInSection+1}`)
+  }else if(pointersTableModeON===true){
     let k = 0;
     while(globalExtractedStrings[k]!=undefined){
       i=0
       while(globalExtractedStrings[k][i] != undefined){
   
         if(globalExtractedStrings[k][i] === 0){
-          numSpaceLeft= numSpaceLeft+1
+          spaceLeftInSection= spaceLeftInSection+1
         }
         i=i+1
       }
@@ -879,16 +612,15 @@ function spaceLeftFunc(data){
     }
     i=0
     while(globalAddressOfEachString[i]!=undefined){
-      numSpaceLeft = numSpaceLeft -globalAddressOfEachString[i].length
+      spaceLeftInSection = spaceLeftInSection -globalAddressOfEachString[i].length
       i=i+1
     }
-    spaceLeftLabel.setText(`Global Space Left: ${numSpaceLeft+1}`)
+    spaceLeftLabel.setText(`Global Space Left: ${spaceLeftInSection+1}`)
   }
-  
 }
 
 //Saves the address of each pointer to be used later.
-function pointerAddressFunc(data){
+function pointerAddressFunc(){
 
   let i = pointer1AddressDecimal;
   let k = 0;
@@ -902,49 +634,40 @@ function pointerAddressFunc(data){
 }
 
 //Determines the pointers that must be edited by comparing the new ones with the old ones.
-function hexValuesFunc(data){
-let i = 1;
-let phase=0;
+function hexValuesFunc() {
+  let i = 1;
+  let phase = 0;
+  const marker = Buffer.from("5B506F743474305D", "hex"); // [POT4T0]
 
-  while(oldPointersHexValues[i] != undefined){
+  //Comparison and update of pointers
+  while (oldPointersHexValues[i] !== undefined) {
+    if (pointersHexValues[i] !== oldPointersHexValues[i]) {
+      const oldPtrRaw = Buffer.from(oldPointersHexValues[i], "hex");
+      const newPtrRaw = Buffer.from(pointersHexValues[i], "hex");
+      const combinedPtr = Buffer.concat([newPtrRaw, marker]);
 
-    if(pointersHexValues[i]!=oldPointersHexValues[i]){
-  
-      let oldPointersHexValuesRaw = Buffer.from(oldPointersHexValues[i].toString("hex").toUpperCase(), "hex")
-      let pointersHexValuesRaw = Buffer.from(pointersHexValues[i].toString("hex").toUpperCase(), "hex")
-
-      let s= 0
-
-      while(extractedPointersIn4[s]!= undefined){
-
-        if(Buffer.compare(extractedPointersIn4[s],oldPointersHexValuesRaw)=== 0){
-
-          extractedPointersIn4[s] = Buffer.from(pointersHexValuesRaw.toString("hex") + "5B506F743474305D","hex")
-
-          if(phase===0){
-
-            phase=1
-          }
+      for (let s = 0; extractedPointersIn4[s] !== undefined; s++) {
+        if (Buffer.compare(extractedPointersIn4[s], oldPtrRaw) === 0) {
+          extractedPointersIn4[s] = Buffer.from(combinedPtr);
+          phase = 1;
         }
-        s= s+1;
       }
-
-      phase=0
     }
-    i=i+1;
+    i++;
   }
 
-  i =0
-  //Removing [POT4T0]
-  while(extractedPointersIn4[i]!=undefined){
-    if(extractedPointersIn4[i].toString("hex").toUpperCase().includes("5B506F743474305D") ===true){
-      extractedPointersIn4[i] = Buffer.from(extractedPointersIn4[i].toString("hex").toUpperCase().replace("5B506F743474305D",""),"hex")
+  //Delete [POT4T0]
+  i = 0;
+  const markerStr = "5B506F743474305D";
+  while (extractedPointersIn4[i] !== undefined) {
+    const ptrHex = extractedPointersIn4[i].toString("hex").toUpperCase();
+    if (ptrHex.includes(markerStr)) {
+      extractedPointersIn4[i] = Buffer.from(ptrHex.replace(markerStr, ""), "hex");
     }
-    i=i+1
+    i++;
   }
 
-  //Updating the pointers viewer label
-  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${sharedPointers})`)
+  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${quantityOfSharedPointers})`);
 }
 
 //Updates currentContent and pointers viewer list widget with the new pointer values.
@@ -960,31 +683,26 @@ function pointerAdjuster(data){
   currentContent = Buffer.from(tempCurrentContent, "binary")
   i = 0;
   while(extractedPointersIn4[i] != undefined){
+    if(pointersViewerFull.item(i).text() !=extractedPointersIn4[i].toString("hex").toUpperCase()){
 
-    if(pointersViewerlistWidget.item(i).text() !=extractedPointersIn4[i].toString("hex").toUpperCase()){
-
-      pointersViewerlistWidget.item(i).setText(`${extractedPointersIn4[i].toString("hex").toUpperCase()}`)  
-
+      pointersViewerFull.item(i).setText(`${extractedPointersIn4[i].toString("hex").toUpperCase()}`)  
     }
 
     i=i+1;
   }
-
-  
-
 }
 
 //Save your progress when edit a string.
 //Before make the saves does some modifications to add or remove data to ensure that the defined
 //area of strings that will be edited don't be bigger or lesser than the original one on the original file.
-function saveProgress(options,replacement){
-  if(options===1){
+function saveProgress(isCSVTranslation,replacement){
+  if(isCSVTranslation){
 
   }else if(listWidget.currentRow() === -1||stringEditorTextEdit.toPlainText()===""){
     return
   }
 
-  if(options ===1){
+  if(isCSVTranslation){
 
     savedString = replacement
     let tempEncode = savedString.toString("utf8")
@@ -1026,11 +744,11 @@ function saveProgress(options,replacement){
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
   
-    rawStrings[listWidget.currentRow()] = savedString
-    extractedStrings = Buffer.concat(rawStrings)
+  rawStrings[listWidget.currentRow()] = savedString
+  extractedStrings = Buffer.concat(rawStrings)
 
-    //Recordatory: Re-check this thing if something related to strings fail
-  if(extractedStrings.length>extractedStringsOLD.length&&pointersTableMode===true){
+  //Recordatory: Re-check this thing if something related to strings fail
+  if(extractedStrings.length>extractedStringsOLD.length&&pointersTableModeON===true){
     extractedStringsOLD = Buffer.concat(rawStrings)
     // console.log("Updating extractedStringsOLD")
   }
@@ -1054,7 +772,7 @@ function saveProgress(options,replacement){
     extractedStrings = Buffer.concat(rawStrings)
   }else {
 
-    if(pointersTableMode===false){
+    if(pointersTableModeON===false){
       while(extractedStrings.length>originalExtractedStringsLength){
         extractedStrings = extractedStrings.slice(0,-1)
         if(extractedStrings.length===originalExtractedStringsLength){
@@ -1064,7 +782,6 @@ function saveProgress(options,replacement){
       }
     }
   }
-  i = 1
 
   while(extractedStrings.length<extractedStringsOLD.length){
 
@@ -1081,7 +798,7 @@ function saveProgress(options,replacement){
   oldcurrentContentLength = currentContent.length
   currentContent = Buffer.from(tempCurrentContent, "binary")
 
-  if(pointersTableMode===true &&currentContent.length>oldcurrentContentLength&&fileSizeMenuAction1.isChecked()===true){
+  if(pointersTableModeON===true &&currentContent.length>oldcurrentContentLength&&fileSizeMenuAction1.isChecked()===true){
     let howMuchToCut = currentContent.length-oldcurrentContentLength
     let currentContentBufferArr = []
     currentContentBufferArr[0] = currentContent.subarray(0,parseInt(postLastStringAddress,16)-1)
@@ -1091,7 +808,7 @@ function saveProgress(options,replacement){
 
   }
 
-  if(pointer1AddressDecimal=== ""&&pointersTableMode===false){
+  if(pointer1AddressDecimal=== ""&&pointersTableModeON===false){
 
   spaceLeftFunc(extractedStrings)
 
@@ -1103,7 +820,7 @@ function saveProgress(options,replacement){
     pointerAdjuster(currentContent)
   }
 
-  if(pointersTableMode===true){
+  if(pointersTableModeON===true){
     pointersTableUpdater()
     spaceLeftFunc(extractedStrings)
   }
@@ -1126,115 +843,78 @@ function saveProgress(options,replacement){
   })
 }
 
-//Save all the input data of the user on settings.cfg
-function saveConfiguration(){
+//Save all the input data of the user on settings.json
+function saveConfiguration() {
+  const currentSectionNumber = Number(sectionNameNumber.text());
+  if (isNaN(currentSectionNumber)) {
+    console.error("Can't save, section number is not valid.");
+    return;
+  }
 
-  let i = 0;
+  const newConfigData = {
+    sectionNumber: currentSectionNumber,
+    sectionName: sectionNameLineEdit.text(),
+    firstPointerAddress: firstPointerAddressLineEdit.text(),
+    lastPointerAddress: lastPointerAddressLineEdit.text(),
+    firstStringAddress: firstStringAddressLineEdit.text(),
+    lastStringAddress: lastStringAddressLineEdit.text(),
+    filePath: filePathQLineEditRead.text(),
+    encoding: UTF8Encoding ? "UTF8" : "SJIS"
+  };
 
-  while(Number(sectionNameNumber.text()) != i){
+  let configurations = [];
+  try {
+    if (fs.existsSync("./settings.json")) {
+      const fileContent = fs.readFileSync("./settings.json", 'utf8');
+      if (fileContent) {
+        configurations = JSON.parse(fileContent);
+        if (!Array.isArray(configurations)) {
+          configurations = [];
+        }
+      }
+    }
+  }catch (err) {
+    console.error("Error reading settings.json file. A new file will be created.", err);
+    configurations = [];
+  }
 
+  const existingConfigIndex = configurations.findIndex(
+    config => config.sectionNumber === currentSectionNumber
+  );
 
-    if(Number(sectionNameNumber.text()) === i+1){
-    console.log("Adding extra slots to config file")
-
-      if (projectsConfHexArr[i] ===undefined){
-        projectsConfHexArr[i]= Buffer.from(`${i+1}`).toString("hex") + "0d0a0d0a0d0a0d0a0d0a0d0a0d0a"
+  if(existingConfigIndex !== -1) {
+    configurations[existingConfigIndex] = newConfigData;
+  }else {
+    configurations.push(newConfigData);
+  }
   
-      }
+  configurations.sort((a, b) => a.sectionNumber - b.sectionNumber);
 
-      projectsConfHexArr[i] =Buffer.from(`${i+1}`).toString("hex") + "0d0a"
+  try{
+    const jsonString = JSON.stringify(configurations, null, 2);
+    fs.writeFileSync("./settings.json", jsonString, 'utf8');
+    
+    console.log("Configuration successfully saved in settings.json!");
 
-      if(sectionNameLineEdit.text()===""){
-        projectsConfHexArr[i] = projectsConfHexArr[i] + "2a0d0a"
-      
-      }else{
-  
-        projectsConfHexArr[i] = projectsConfHexArr[i] + 
-        Buffer.from(sectionNameLineEdit.text(), "utf8").toString("hex") + "0d0a"
+    if (newConfigData.sectionName) {
+      sectionNameHeader = newConfigData.sectionName;
+      sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`);
+    }
 
-      }
-
-      if(firstPointerAddressLineEdit.text()=== ""
-      &&lastPointerAddressLineEdit.text() ===""){
-        projectsConfHexArr[i] = projectsConfHexArr[i] + "2a0d0a" + "2a0d0a"
-
-      
-      }else if(firstPointerAddressLineEdit.text() ===""
-      &&lastPointerAddressLineEdit.text() != ""){
-        projectsConfHexArr[i] = projectsConfHexArr[i] + "2a0d0a" + lastPointerAddressLineEdit.text()
-      }else if(firstPointerAddressLineEdit.text() !=""
-      &&lastPointerAddressLineEdit.text() === ""){
-        projectsConfHexArr[i] = projectsConfHexArr[i] + firstPointerAddressLineEdit.text() + "2a0d0a"
-      }
-      
-      else{
-        projectsConfHexArr[i] = projectsConfHexArr[i] + 
-        +Buffer.from(firstPointerAddressLineEdit.text(), "utf8").toString("hex") + "0d0a"
-        +Buffer.from(lastPointerAddressLineEdit.text(), "utf8").toString("hex") + "0d0a"
-
-      }
-
-      projectsConfHexArr[i] = projectsConfHexArr[i] + 
-      Buffer.from(firstStringAddressLineEdit.text(), "utf8").toString("hex") + "0d0a" +
-      Buffer.from(lastStringAddressLineEdit.text(), "utf8").toString("hex") + "0d0a" +
-      Buffer.from(filePathQLineEditRead.text(), "utf8").toString("hex") + "0d0a" 
-
-      if(UTF8Encoding===true){
-        projectsConfHexArr[i] = projectsConfHexArr[i] + 
-        Buffer.from("0", "utf8").toString("hex") + "0d0a"
-      }else if(shiftJISEncoding===true){
-        projectsConfHexArr[i] = projectsConfHexArr[i] +
-        Buffer.from("1", "utf8").toString("hex") + "0d0a"
-      }
-
-      if (projectsConfHexArr[i+1] ===undefined){
-        projectsConfHexArr[i+1]= Buffer.from(`${i+2}`).toString("hex") + "0d0a0d0a0d0a0d0a0d0a0d0a0d0a"
-
-      }
-    }else if(Number(sectionNameNumber.text()) > i+1&& projectsConfHexArr[i+1] === undefined
-     ||
-     Number(sectionNameNumber.text()) > i+1 && projectsConfHexArr[i+1].split("0d0a").length<4){
-      
-       console.log("No more space, adding more")
-       projectsConfHexArr[(i+1)]=  Buffer.from(`${(i+2)}`).toString("hex") + "0d0a0d0a0d0a0d0a0d0a0d0a0d0a"
-       if (projectsConfHexArr[i+2] ===undefined){
-         projectsConfHexArr[i+2]= Buffer.from(`${i+3}`).toString("hex") +  "0d0a0d0a0d0a0d0a0d0a0d0a0d0a"
-       }
-   }
-    i=i+1;
-
+  } catch (err) {
+    console.error("Error by saving at settings.json:", err);
+    errorMessageBox.setWindowTitle("Error");
+    errorMessageBox.setText("ERROR Configuration could not be saved.");
+    errorMessageButton.setText("Ok");
+    errorMessageBox.exec();
   }
-
-  if(sectionNameLineEdit != ""){
-    sectionNameHeader = sectionNameLineEdit.text()
-    sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`)
-  }
-
-  let toBeWrited = projectsConfHexArr.join("5b53504c49545d0d0a")
-
-  fs.writeFile(`./settings.cfg`,`${Buffer.from(toBeWrited,"hex")}`,{
-    encoding: "utf8",
-    flag: "w",
-    mode: 0o666
-  },(err) => {
-  
-  if (err){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("ERROR! maybe the file is being used?")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-
-  }
-
-  else{
-
-    console.log("Done!")
-
-  }
-  })
 }
 
-//Self-explanatory.
+//Resets everything
+//options=1: default reset only
+//options=2: default reset + pointer addresses
+//options=3: default reset + table mode
+//options=4: default reset + address inputs
 function setDefaultValues(options){
 
   if (options===1){
@@ -1257,6 +937,12 @@ function setDefaultValues(options){
     organizedSections = []
     oldSelectedTablePointers = []
     sectionNameNumber.setText(1)
+  }else if(options===4){
+    firstPointerAddressLineEdit.setText("")
+    lastPointerAddressLineEdit.setText("")
+    firstStringAddressLineEdit.setText("")
+    lastStringAddressLineEdit.setText("")
+    addressOfEachPointer = []
   }else{
     sectionNameLineEdit.setText("")
     firstPointerAddressLineEdit.setText("")
@@ -1280,7 +966,7 @@ function setDefaultValues(options){
   // string1AddressDecimal= ""
   // string2AddressDecimal = ""
   extractedStringsOLD = ""
-  numSpaceLeft = 0
+  spaceLeftInSection = 0
   addressOfEachString = []
   pointersHexValues = []
   addressOfEachStringInMemory= []
@@ -1291,8 +977,8 @@ function setDefaultValues(options){
   // projectsConfHexArr = []
   oldRawString = ""
   oldSelectedString = -1
-  sharedPointers = 0
-  oldMatchedSharedPointers = []
+  quantityOfSharedPointers = 0
+  itemPositionOfSharedPointers = []
 
   hiddenPointers = 0
   stringsOffset = 0
@@ -1300,8 +986,8 @@ function setDefaultValues(options){
 
   listWidget.clear()
   listWidget.scrollToTop()
-  pointersViewerlistWidget.clear()
-  pointersViewerlistWidget.scrollToTop()
+  pointersViewerFull.clear()
+  pointersViewerFull.scrollToTop()
   exportAllButton.setEnabled(false)
   csvButton.setEnabled(false)
   csvButton2.setEnabled(false)
@@ -1310,14 +996,14 @@ function setDefaultValues(options){
   pointersEditorSaveButton.setEnabled(false)
   pointersEditorLabel.setEnabled(false)
   pointersEditor.setEnabled(false)
-  pointersViewerForSharedPointersListWidget.setEnabled(false)
+  pointersViewerSpecific.setEnabled(false)
   mainMenuAction3.setEnabled(false)
   bigEndian.setEnabled(true)
 
   stringEditorTextEdit.setPlainText("")
 
-  if(pointersTableMode===false){
-  sectionNameHeader= "Section name"
+  if(pointersTableModeON===false){
+    sectionNameHeader= "Section name"
   }else{
 
   }
@@ -1332,99 +1018,102 @@ function setDefaultValues(options){
   searchLineEdit.setText("")
 }
 
-//Takes the data from settings.cfg and add it into the lineEdits.
-function loadConfiguration(){
-  
-  if(
-     projectsConfHexArr[Number(sectionNameNumber.text()-1)] === undefined||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[0]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[0]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[1]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[1]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[2]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[2]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[3]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[3]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[4]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[4]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[5]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[5]) === undefined ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6]) === '' ||
-    (projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6]) === undefined){
+//Takes the data from settings.json and add it into the lineEdits.
+function loadConfiguration() {
+  const currentSectionNumber = Number(sectionNameNumber.text());
 
-    console.log(`Not valid data for ${sectionNameNumber.text()}, hex spaces will be empty`)
-    setDefaultValues()
+  if (isNaN(currentSectionNumber)) {
+    console.error("The section number is not valid.");
+    setDefaultValues();
+    start();
+    return;
+  }
 
-    if(specialMode===true){
-      stopProcess =true
+  try {
+    if (!fs.existsSync("./settings.json")) {
+      console.log("The settings.json file does not exist. Using default values.");
+      setDefaultValues();
+      start();
+      return;
     }
 
-    start()
-
-  }else{
-    setDefaultValues()
-    console.log("Configuration loaded")
-    sectionNameNumber.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[0], "hex").toString("utf8") + " ")
+    const fileContent = fs.readFileSync("./settings.json", 'utf8');
     
-    
+    const configurations = fileContent ? JSON.parse(fileContent) : [];
 
-    if(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[1] === "2a"){
-  
-      sectionNameLineEdit.setText("")
-      sectionDetailsLabel.setText(`Section name: String#N/A`)
-      sectionNameHeader = "Section name:"
+    const sectionConfig = configurations.find(
+      config => config.sectionNumber === currentSectionNumber
+    );
+
+    if (!sectionConfig) {
+      console.log(`No configuration found for the section ${currentSectionNumber}.`);
+
+      if(hexViewBuffer){
+        setDefaultValues(4);
+      }else{
+        setDefaultValues();
+      }
+
+
+      if (csvInfoGatheringMode === true) {
+        stopCsvInfoGatheringMode = true;
+      }
+      start();
+      return;
+    }
+    setDefaultValues();
+    sectionNameLineEdit.setText(sectionConfig.sectionName || "");
+    firstPointerAddressLineEdit.setText(sectionConfig.firstPointerAddress || "");
+    lastPointerAddressLineEdit.setText(sectionConfig.lastPointerAddress || "");
+    firstStringAddressLineEdit.setText(sectionConfig.firstStringAddress || "");
+    lastStringAddressLineEdit.setText(sectionConfig.lastStringAddress || "");
+    filePathQLineEditRead.setText(sectionConfig.filePath || "");
+
+    selectedFile = sectionConfig.filePath || "";
+    sectionNameHeader = sectionConfig.sectionName || "Section name:";
+    sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`);
+    
+    if (sectionConfig.encoding === "UTF8"){
+      setUTF8Encoding(true)
     }else{
-      sectionNameLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[1], "hex").toString("utf8"))
-      sectionNameHeader = sectionNameLineEdit.text()
-
-      sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`)
+      setShiftJISEncoding(true)
     }
-
-    if(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[2] === "2a"){
-
-      firstPointerAddressLineEdit.setText("")
-    }else{
-      firstPointerAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[2], "hex").toString("utf8"))
-    }
-
-    if(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[3] === "2a"){
-
-      lastPointerAddressLineEdit.setText("")
-    }else{
-      lastPointerAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[3], "hex").toString("utf8"))
-    }
-
-  
-    firstStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[4], "hex").toString("utf8"))
     
-    lastStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[5], "hex").toString("utf8"))
-    filePathQLineEditRead.setText(Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6], "hex").toString("utf8"))
-    selectedFile = [`${`${Buffer.from(projectsConfHexArr[Number(sectionNameNumber.text()-1)].split("0d0a")[6], "hex").toString("utf8")}`}`]
-    start()
-    
+    start();
+
+  }catch (err) {
+    console.error("Error reading or parsing settings.json. Default values ​​will be used.", err);
+    setDefaultValues();
+    start();
   }
 }
 
 // +1 to sectionNameNumber
 function plus1(tableMode,options){
 
+  if(mibListObjsData.length>0){
+    sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
+    loadMibConfiguration(Number(sectionNameNumber.text()))
+    return
+  }
+
   if(tableMode===false){
     if(sectionNameNumber.text() === "255 "){
       return
     }
-    if(modeVariable===0){
+    if(sectionPaginationPointerFlag===0){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
 
-    }else if(options>1&&modeVariable===2){
+    }else if(options>1&&sectionPaginationPointerFlag===2){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
-      saveAndPrepare()
+      saveAndPrepare(true)
 
-    }else if(options>1&&modeVariable===1){
+    }else if(options>1&&sectionPaginationPointerFlag===1){
       sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
       loadConfiguration()
-      saveAndPrepare2()
+      saveAndPreparePointerless(true)
     }
 
   }else{
@@ -1445,6 +1134,12 @@ function minus1(tableMode){
     return
   }
 
+  if(mibListObjsData.length>0){
+    sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
+    loadMibConfiguration(Number(sectionNameNumber.text()))
+    return
+  }
+
   if(tableMode===false){
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
     loadConfiguration()
@@ -1456,21 +1151,23 @@ function minus1(tableMode){
   }
 }
 
-function goToStart(){
+//Moves section to 1
+function goToFirstSection(){
 
   sectionNameNumber.setText(1 + " ")
 
-  if(pointersTableMode===false){
+  if(pointersTableModeON===false&&mibListObjsData.length===0){
     loadConfiguration()
-  }else if(pointersTableMode===true){
+  }else if(pointersTableModeON===true&&mibListObjsData.length===0){
     loadPTConfiguration()
+  }else{
+    loadMibConfiguration(Number(sectionNameNumber.text()))
   }
 }
 
 //Rearrange the text in the string editor with a character limit per line
-function specificCharactersPerLine(x){
-  if(choosedCharacters.text() === ""||choosedCharacters.text() <=0
-  ||x=== undefined){
+function specificCharactersPerLine(){
+  if(choosedCharacters.text() === ""||choosedCharacters.text() <=0){
     return
   }
 
@@ -1494,7 +1191,7 @@ function specificCharactersPerLine(x){
     //The QTextCursor is neccesary to make this part work since i need to move the cursor to
     //the end of the text but that module has not been ported to nodegui yet :/ . This will
     //remain commented.
-    // stringEditorTextEdit.removeEventListener("textChanged")
+    //stringEditorTextEdit.removeEventListener("textChanged")
 
     stringEditorTextEdit.setPlainText(charactersArr.join(""))
 
@@ -1506,620 +1203,480 @@ function specificCharactersPerLine(x){
   }
 }
 
-//Display a window to choose a .csv
-function csvSelection(){
-  const csvFileDialog = new QFileDialog()
-  csvFileDialog.setNameFilter("*.csv")
-  csvFileDialog.setWindowTitle("Choose a .csv file")
-  let selectedCsv
-  let goBack = true
-  csvFileDialog.addEventListener("fileSelected",function(){
+// Opens file dialog and returns selected CSV path (or null if invalid)
+function csvSelection() {
+  const csvFileDialog = new QFileDialog();
+  csvFileDialog.setFileMode(1)
 
-    if(csvFileDialog.selectedFiles().length!=0&&
-    fs.lstatSync(csvFileDialog.selectedFiles()[0]).isDirectory()===false&&
-    path.extname(`${csvFileDialog.selectedFiles()[0].toLowerCase()}`)===".csv"){
+  csvFileDialog.setNameFilter("*.csv");
+  csvFileDialog.setWindowTitle("Choose a .csv file");
   
-      selectedCsv = csvFileDialog.selectedFiles();
-      goBack=false
-    }else{
+  let selectedCsv = null;
+  const lstatSync = fs.lstatSync;
+  const extname = path.extname;
   
-      return null
+  csvFileDialog.addEventListener("fileSelected", function(file) {
+    if (file) {
+
+      if (!lstatSync(file).isDirectory() && 
+        extname(file).toLowerCase() === ".csv") {
+        selectedCsv = file;
+      }
     }
-
-  })
+  });
 
   csvFileDialog.exec();
-
-  if(goBack===true){
-    return null
-  }
-  return selectedCsv
+  
+  return selectedCsv;
 }
 
-//Creates all the objects neccesary to make a selection window.
-//Manages the differents configurations and options that can be selected.
-async function csvTranslation(options){
+//Prompts user to select translation scope (current section vs all sections)
+//before proceeding with CSV-based translation
+async function csvTranslation(isWordOnlyTranslation) {
 
-  const csvTranslationDialog = new QDialog()
-  const csvTranslationRow = new QWidget()
+  const dialog = new QDialog();
+  const row = new QWidget();
+  const dialogLayout = new QBoxLayout(2);
+  const rowLayout = new QBoxLayout(0);
+  
+  Object.assign(dialog, {
+      windowTitle: "Select one translation option",
+      fixedSize: { width: 300, height: 80 },
+      modal: true
+  });
 
-  const csvTranslationDialogLayout = new QBoxLayout(2)
-  const csvTranslationRowLayout = new QBoxLayout(0)
+  row.setLayout(rowLayout);
+  dialog.setLayout(dialogLayout);
+  dialogLayout.addWidget(row);
 
-  csvTranslationRow.setLayout(csvTranslationRowLayout)
-  csvTranslationDialog.setFixedSize(300,80)
+  const buttons = {
+      thisSection: new QPushButton(),
+      allSections: new QPushButton()
+  };
 
-  csvTranslationDialog.setLayout(csvTranslationDialogLayout)
-  csvTranslationDialog.setModal(true)
+  buttons.thisSection.setText("Strings in this section")
+  buttons.allSections.setText("Strings in all sections")
 
-  csvTranslationDialogLayout.addWidget(csvTranslationRow)
+  rowLayout.addWidget(buttons.thisSection);
+  rowLayout.addWidget(buttons.allSections);
 
-  csvTranslationDialog.setWindowTitle("Select one translation option")
+  buttons.thisSection.addEventListener("clicked", () => handleSectionSelection(dialog, isWordOnlyTranslation, true));
+  buttons.allSections.addEventListener("clicked", () => handleSectionSelection(dialog, isWordOnlyTranslation, false));
 
-  const csvTranslationForThisSection = new QPushButton()
-  const csvTranslationForAllSections = new QPushButton()
+  dialog.exec();
+}
 
-  csvTranslationForThisSection.setText("Strings in this section")
-  csvTranslationForAllSections.setText("Strings in all sections")
+//Manages what user select for CSV translation
+function handleSectionSelection(dialog, isWordOnlyTranslation, isSingleSection) {
+  dialog.close();
+  
+  const selectedCsv = csvSelection();
+  if (!selectedCsv) return;
 
-  csvTranslationRowLayout.addWidget(csvTranslationForThisSection)
-  csvTranslationRowLayout.addWidget(csvTranslationForAllSections)
+  if(isSingleSection){
+    processSingleSection(selectedCsv, isWordOnlyTranslation);
+  }else {
+    processAllSections(selectedCsv, isWordOnlyTranslation);
+  }
+}
 
-  csvTranslationForThisSection.addEventListener("clicked", function(){
-    csvTranslationDialog.close()
-    let selectedCsv = csvSelection()
+//Only translates the current section
+function processSingleSection(selectedCsv, isWordOnlyTranslation) {
+  csvTranslationPhase2(selectedCsv, isWordOnlyTranslation, true);
+  translatedStringsQProgressDialog.close();
+  csvTranslationCanceled = false;
+}
 
-    if(selectedCsv===null){
-      return
+/**
+ * Processes CSV translation across all available sections.
+ * 
+ * Handles two modes:
+ * - Table mode: Iterates through sectionedCurrentContent array
+ * - Normal mode: Navigates through sections using pagination until end is reached
+ * 
+ * Manages cancellation flags and progress dialog throughout the process.
+ * 
+ * @param {string} selectedCsv - Path to the selected CSV file
+ * @param {boolean} isWordOnlyTranslation - If true, performs word-only translation mode
+ */
+function processAllSections(selectedCsv, isWordOnlyTranslation) {
+  let endReached = false;
+  csvInfoGatheringMode = true;
+  sectionPaginationPointerFlag = pointer1AddressDecimal ? 2 : 1;
+
+  goToFirstSection();
+
+  const processSection = () => {
+    if (notCorrectDataSkipThisSection === false) {
+      csvTranslationPhase2(selectedCsv, isWordOnlyTranslation, endReached);
     }
 
-    let endReached = true
-    csvTranslationPhase2(selectedCsv,options,endReached)
-    translatedStringsQProgressDialog.close()
-    csvTranslationCanceled = false
-  })
+    notCorrectDataSkipThisSection = false;
+  };
 
-  csvTranslationForAllSections.addEventListener("clicked", function(){
-    csvTranslationDialog.close()
-    let selectedCsv = csvSelection()
-
-    if(selectedCsv===null){
-      return
+  if(pointersTableModeON) {
+    for (let k = 0; k < sectionedCurrentContent.length; k++) {
+      if (csvTranslationCanceled || stopCsvInfoGatheringMode) break;
+      
+      endReached = (k === sectionedCurrentContent.length - 1);
+      processSection();
+      
+      if (!csvTranslationCanceled) plus1(true, 2);
     }
-
-    let k =0
-
-    let endReached = false
-    specialMode = true
-
-    if(pointer1AddressDecimal===""){
-      modeVariable = 1
-    }else{
-      modeVariable = 2
-    }
-
-    goToStart()
-
-    if(pointersTableMode===true){
-      csvTranslationForThisPTLoop:
-      while(k!=sectionedCurrentContent.length){
-  
-        if(csvTranslationCanceled===true||stopProcess===true){
-          break csvTranslationForThisPTLoop
-        }
-        if(k===sectionedCurrentContent.length-1){
-          endReached = true
-        }
-  
-        if(skipThisSection===false){
-          csvTranslationPhase2(selectedCsv,options,endReached)
-        }
-  
-        skipThisSection = false
-        if(csvTranslationCanceled===false){
-
-          plus1(pointersTableMode,2)
-        }
-
-  
-        k=k+1
+  }else {
+    sectionPaginationPointerFlag === 2 ? saveAndPrepare(true) : saveAndPreparePointerless(true);
+    
+    while (!endReached && !csvTranslationCanceled) {
+      if (stopCsvInfoGatheringMode) {
+        endReached = true;
+        csvTranslationCanceled = true;
       }
-    }else{
-
-      if(modeVariable===2){
-        saveAndPrepare()
-      }else{
-        saveAndPrepare2()
-      }
-
-      while(endReached===false &&csvTranslationCanceled===false){
-
-        if(stopProcess===true){
-          endReached = true
-          csvTranslationCanceled = true
-        }
-
-        if(skipThisSection===false||stopProcess===true){
-          csvTranslationPhase2(selectedCsv,options,endReached)
-        }
-
-        skipThisSection = false
-        if(csvTranslationCanceled===false){
-
-          plus1(pointersTableMode,2)
-        }
-      }
+      
+      processSection();
+      if (!csvTranslationCanceled) plus1(pointersTableModeON, 2);
     }
-    translatedStringsQProgressDialog.close()
-    modeVariable=0
-    specialMode = false
-    skipThisSection = false
-    stopProcess=false
-    csvTranslationCanceled = false
-  })
+  }
 
-  csvTranslationDialog.exec()
+  translatedStringsQProgressDialog.close();
+  sectionPaginationPointerFlag = 0;
+  csvInfoGatheringMode = false;
+  notCorrectDataSkipThisSection = false;
+  stopCsvInfoGatheringMode = false;
+  csvTranslationCanceled = false;
 }
 
 //Check if the given csv is valid (separated by semicolons)
 //Organize the data from the csv given by the user, saving them in
 //replacementStringsEncodedBuffer and stringToSearchEncodedBuffer.
-function csvTranslationPhase2(selectedCsv,options,endReached){
+function csvTranslationPhase2(selectedCsv, isWordOnlyTranslation, endReached) {
 
-  let csvContent = fs.readFileSync(`${selectedCsv}`);
+  const csvContent = fs.readFileSync(selectedCsv);
+  let csvBinaryString = csvContent.toString('hex')
+  .replace("efbbbf", "")
+  .replaceAll("0d0a", "0a");
 
-  let testCsvContent = csvContent.toString("hex").split("0d0a")
-  testCsvContent[0] = testCsvContent[0].replace("efbbbf","")
+  if (!csvBinaryString.includes("3b")) {
+    showCsvError();
+    createCSVFile();
+    return;
+  }
 
-  let i = 0;
-  let nextBadSemicolonWillStopTheTest = true
+  const { replacementBuffers, searchBuffers } = processCsvData(csvBinaryString);
 
-  if(testCsvContent[0].includes("3b")===true){
+  //Pair validation
+  if (replacementBuffers.length !== searchBuffers.length) {
+    showTranslationError();
+    return;
+  }
 
-  }else{
-    errorMessageBox.setText(`Seems to be that your .csv file is not separated by
-    semicolons, a .csv file separated by semicolons will be created in the root 
-    folder, please try to use it.`)
-    errorMessageBox.setWindowTitle("Error, check your '.csv' file")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-
-    fs.writeFile(`./NewCsv.csv`,Buffer.from("EFBBBF48656C6C6F3B486F6C610D0A","hex"),{
-      encoding: "utf8",
-      flag: "w",
-      mode: 0o666
-    },(err) => {
+  const encodedData = encodeBuffers(replacementBuffers, searchBuffers);
   
-      if (err){
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText("ERROR! .csv could not be created D:\n")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
+  csvTranslationMode = true;
+  foundAndReplaceIfMatch(encodedData.replacementBuffers, encodedData.searchBuffers, isWordOnlyTranslation, endReached);
+
+  //Shows error message when CSV lacks semicolon separators
+  function showCsvError() {
+    errorMessageBox.setText("Seems to be that your .csv file is not separated by\nsemicolons, a .csv file separated by semicolons will be created in the root\nfolder, please try to use it.");
+    errorMessageBox.setWindowTitle("Error, check your '.csv' file");
+    errorMessageButton.setText("                                                Ok                                              ");
+    errorMessageBox.exec();
+  }
+
+  //Shows error when translation pairs are mismatched
+  function showTranslationError() {
+    errorMessageBox.setWindowTitle("Error");
+    errorMessageBox.setText("The csv contains strings without a translation or text to be translated");
+    errorMessageButton.setText("                                                Ok                                              ");
+    errorMessageBox.exec();
+  }
+
+  //Parses CSV binary data into arrays of replacement and search strings
+  //Handles quoted text and semicolon/newline separators
+  function processCsvData(binaryStr) {
+    const replacements = [""];
+    const searches = [""];
+    let mode = 0;
+    let k = 0, m = 0;
+
+    for (let i = 0; i < binaryStr.length; i += 2) {
+      const bytePair = binaryStr.substr(i, 2);
+
+      if(bytePair==="22"){
+        const startQuotes = i+2
+        let endQuotes = 0
+        for (let n=0;!(binaryStr.substr(startQuotes+n, 2)==="22"
+        && binaryStr.substr(startQuotes+n+2, 2)==="3b")||
+        !(binaryStr.substr(startQuotes+n, 2)==="22"
+        && binaryStr.substr(startQuotes+n+2, 2)==="0a"
+        &&binaryStr.substr(startQuotes+n+4, 2))==="3b";n += 2){
+          endQuotes+=2
+        }
+
+        if(mode===0){
+          replacements[k] = binaryStr.substr(startQuotes,endQuotes)
+          k++
+          replacements[k] = ""
+          i += endQuotes+4
+          mode = 1
+        }else{
+          searches[m] = binaryStr.substr(startQuotes,endQuotes)
+          m++
+          searches[m] = ""
+          i += endQuotes+4
+          mode = 0
+        }
+        continue
       }
-      else{
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText(`New .csv created sucessfully`)
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
+      
+      if (mode === 0) {
+        if (bytePair !== "3b" && bytePair !== "0a") {
+          replacements[k] += bytePair;
+        } else {
+          k++;
+          replacements[k] = "";
+          mode = 1;
+        }
+      } else {
+        if (bytePair !== "3b" && bytePair !== "0a") {
+          searches[m] += bytePair;
+        } else {
+          m++;
+          searches[m] = "";
+          mode = 0;
+        }
       }
-    })
-    return
-  }
-
-  while(testCsvContent[i] !=undefined){
-
-
-    if(testCsvContent[i]==="3b"){
-
-      nextBadSemicolonWillStopTheTest = true
-
-    }else if(testCsvContent[i].substring(0,2)!="3b" &&testCsvContent[i].substring(testCsvContent[i].length-2)!="3b"){
-
-      nextBadSemicolonWillStopTheTest = false
-
-    }else if(testCsvContent[i].substring(0,2)==="3b" &&nextBadSemicolonWillStopTheTest === true){
-
-      errorMessageBox.setText(`The text #${i+1} to be translated has not it\ntranslated counterpart.`)
-      errorMessageBox.setWindowTitle("Error, check your .csv file")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      return
-
-    }else if(testCsvContent[i].substring(testCsvContent[i].length-2)==="3b"&&nextBadSemicolonWillStopTheTest === true){
-
-      errorMessageBox.setText(`The replacement text #${i+1} has not it untranslated\ncounterpart.`)
-      errorMessageBox.setWindowTitle("Error, check your .csv file")
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      return
-
-    }
-    i=i+1
-  }
-  testCsvContent=""
-
-
-  i = 0
-  let k = 0;
-  let m = 0;
-  let mode = 0;
-  let replacementStrings = [] //Left column in CSV
-  let stringToSearch = [] //Right Column in CSV
-  csvBinaryString = csvContent.toString("hex")
- 
-  csvBinaryString = csvBinaryString.replaceAll("0d0a","0a")
-  csvBinaryString = csvBinaryString.replace("efbbbf","")
-
-  replacementStrings[0] = ""
-  stringToSearch[0] = ""
-
-  while(csvBinaryString[i] != undefined){
-
-    if(mode ===0 && csvBinaryString[i] +csvBinaryString[i+1] != "3b" && csvBinaryString[i] +csvBinaryString[i+1] !="0a"){
-      replacementStrings[k] = replacementStrings[k]+ csvBinaryString[i] + csvBinaryString[i+1]
-
-    }else if (mode ===0 && csvBinaryString[i] +csvBinaryString[i+1] === "3b" || mode ===0 && csvBinaryString[i] +csvBinaryString[i+1] ==="0a"){
-      k=k+1;
-      replacementStrings[k] = ""
-      mode =1;
-    }else if(mode ===1 && csvBinaryString[i] +csvBinaryString[i+1] != "3b" &&csvBinaryString[i] +csvBinaryString[i+1] !="0a"){
-      stringToSearch[m] = stringToSearch[m] +csvBinaryString[i] + csvBinaryString[i+1]
-
-    }else if(mode ===1 && csvBinaryString[i] +csvBinaryString[i+1] === "3b"|| mode ===1 && csvBinaryString[i] +csvBinaryString[i+1] ==="0a"){
-      m=m+1;
-      stringToSearch[m] = ""
-      mode =0;
-    }
-    i=i+2;
-  }
-  i = 0;
-  k = 0;
-
-  //English strings
-  let replacementStringsTemp = []
-  replacementStringsTemp[0] = ""
-  let replacementStringsBuffer = []
-  let iDontKnowWhyIneedToUseThis=   0
-
-  while(replacementStrings[i] != undefined){
-
-    iDontKnowWhyIneedToUseThis = replacementStrings[i]
-
-    if(replacementStrings[i] === '' && replacementStringsTemp[k] != undefined){
-
-      replacementStringsTemp[k] = replacementStringsTemp[k].substring(0,replacementStringsTemp[k].length-2)
-      replacementStringsBuffer[k] = Buffer.from(replacementStringsTemp[k],"hex")
-      k= k+1
-      replacementStringsTemp[k] =""
-    }else{
-      replacementStringsTemp[k] = replacementStringsTemp[k] + iDontKnowWhyIneedToUseThis + "0a"
-
     }
 
-    i=i+1;
+    return {
+      replacementBuffers: processTextChunks(replacements),
+      searchBuffers: processTextChunks(searches)
+    };
   }
-  i = 0;
-  k = 0;
 
-  //Encoded Strings
-  let stringToSearchTemp = []
-  stringToSearchTemp[0] = ""
-  let stringToSearchBuffer = []
-  let iDontKnowWhyIneedToUseThis2= 0;
+  //Converts hex chunks into buffers, adding newlines between chunks
+  function processTextChunks(chunks){
+    const buffers = [];
+    let temp = "";
+    
+    for (const chunk of chunks) {
+      if (chunk === "" && temp) {
 
-
-  while(stringToSearch[i] != undefined){
-
-    iDontKnowWhyIneedToUseThis2 = stringToSearch[i]
-
-    if(stringToSearch[i] === '' && stringToSearchTemp[k] != undefined){
-
-      stringToSearchTemp[k] = stringToSearchTemp[k].substring(0,stringToSearchTemp[k].length-2)
-      stringToSearchBuffer[k] = Buffer.from(stringToSearchTemp[k],"hex")
-      k= k+1
-      stringToSearchTemp[k] =""
-
-    }else{
-      stringToSearchTemp[k] = stringToSearchTemp[k] + iDontKnowWhyIneedToUseThis2 + "0a"
-   
+        buffers.push(Buffer.from(temp.slice(0, -2), "hex"));
+        temp = "";
+      } else if (chunk !== "") {
+        temp += chunk + "0a";
+      }
     }
 
-    i=i+1;
-  }
-  i = 0;
-  k = 0;
-
-  let replacementStringsEncoded = []
-  let replacementStringsEncodedBuffer = []
-
-  while(replacementStringsBuffer[i]!= undefined){
-
-    if(shiftJISEncoding ===true){
-      replacementStringsEncoded[i] = EncodingModule.convert(replacementStringsBuffer[i].toString("utf8"), {
-        to: 'SJIS',
-        from: 'UNICODE',
-      });
-
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"""','""')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('""','"')
-      replacementStringsEncodedBuffer[k] = Buffer.from(replacementStringsEncoded[i], "binary")
-      if(replacementStringsEncoded[i] === ''){
-  
-        k= k-1;
-      }
-      k=k+1;
-      i=i+1;
-    }else if(UTF8Encoding===true){
-
-      replacementStringsEncoded[i] = replacementStringsBuffer[i].toString("utf8")
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"."','."')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('"""','""')
-      replacementStringsEncoded[i] = replacementStringsEncoded[i].replaceAll('""','"')
-      replacementStringsEncodedBuffer[k] = Buffer.from(replacementStringsEncoded[i])
-      if(replacementStringsEncoded[i] === ''){
-  
-        k= k-1;
-      }
-      k=k+1;
-      i=i+1;
+    if (temp) {
+      buffers.push(Buffer.from(temp.slice(0, -2), "hex"));
     }
-
+    
+    return buffers;
   }
 
-  i = 0;
-  k=0;
-  let stringToSearchEncoded = []
-  let stringToSearchEncodedBuffer = []
+  //Encodes buffers with proper character encoding (UTF-8 or Shift-JIS)
+  //Also cleans up any quote artifacts from the CSV
+  function encodeBuffers(replacements, searches) {
+    const encode = (buffer) => {
+      let text = buffer.toString("utf8")
+      .replace(/\"\.\"/g, '."')
+      .replace(/\"\"\"/g, '""')
+      .replace(/\"\"/g, '"');
 
-  while(stringToSearchBuffer[i]!= undefined){
-
-    if(shiftJISEncoding===true){
-      stringToSearchEncoded[i] = EncodingModule.convert(stringToSearchBuffer[i].toString("utf8"), {
-        to: 'SJIS',
-        from: 'UNICODE',
-      });
-  
-      stringToSearchEncodedBuffer[k] = Buffer.from(stringToSearchEncoded[i], "binary")
-      if(stringToSearchEncoded[i] === ''){
-        k= k-1;
+      if (shiftJISEncoding) {
+        return Buffer.from(
+          EncodingModule.convert(text, { to: 'SJIS', from: 'UNICODE' }),
+          "binary"
+        );
       }
-      k= k+1;
-      i=i+1;
-    }else if(UTF8Encoding===true){
+      return Buffer.from(text);
+    };
 
-      stringToSearchEncoded[i] = stringToSearchBuffer[i].toString("utf8")
-      stringToSearchEncodedBuffer[k] = Buffer.from(stringToSearchEncoded[i])
-
-      if(stringToSearchEncoded[i] === ''){
-        k= k-1;
-      }
-      k= k+1;
-      i=i+1;
-    }
-
+    return {
+      replacementBuffers: replacements.map(encode),
+      searchBuffers: searches.map(encode)
+    };
   }
-
-
-  if(replacementStringsEncodedBuffer[replacementStringsEncodedBuffer.length-1].toString("hex").length===0){
-    replacementStringsEncodedBuffer.pop()
-  }else if(stringToSearchEncodedBuffer[stringToSearchEncodedBuffer.length-1].toString("hex").length===0){
-    stringToSearchEncodedBuffer.pop()
-  }
-
-  if(replacementStringsEncodedBuffer.length != stringToSearchEncodedBuffer.length){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("The csv contains strings without a translation or text to be translated")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
-  }
-  csvTranslationMode = true
-
-foundAndReplaceIfMatch(replacementStringsEncodedBuffer,stringToSearchEncodedBuffer,options,endReached)
 }
 
 //Uses the data from stringToSearchEncodedBuffer/searchStrings
 //to search for matches in currentContent, if found any, substitute it with the
-//translated text in replacementStringsEncodedBuffer/replaceStrings.
-//Option 1= Translate strings partially
-async function foundAndReplaceIfMatch(replaceStrings,searchStrings,options,endReached){
-  let lastCsvTranslationLogOriginal = []
-  let lastCsvTranslationLogReplacement = []
-  let lastCsvTranslationLogReplacementClean = []
+//translated text in replaceStrings.
+async function foundAndReplaceIfMatch(replaceStrings, searchStrings, isWordOnlyTranslation, endReached) {
 
-  let i = 0;
-  let k = 0;
-
-  translatedStringsQProgressDialog.setMaximum(rawStrings.length-1)
-  translatedStringsQProgressDialog.setLabelText(`Waiting for 1° match in this section...`)
-  translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait")
-  translatedStringsQProgressDialog.show()
-  globalQApplication.processEvents()
+  const rawStringsLength = rawStrings.length;
+  const replaceStringsLength = replaceStrings.length;
+  const hexCache = new Map();
   
-  if(options===1){
+  //In case of full string translation, this is done to maximize space
+  const preprocessedSearches = isWordOnlyTranslation === true ? false : 
+  searchStrings.map(s => {
+    return s.toString("hex").replaceAll("0a200a", "0a0a");
+  });
 
-    rawStringLoop1:
-    while(rawStrings[i] != undefined){
+  translatedStringsQProgressDialog.setMaximum(rawStringsLength - 1);
+  translatedStringsQProgressDialog.setLabelText("Waiting for 1° match in this section...");
+  translatedStringsQProgressDialog.setWindowTitle("Task in progress, please wait");
+  translatedStringsQProgressDialog.show();
+  globalQApplication.processEvents();
 
+  const lastCsvTranslationLogOriginal = [];
+  const lastCsvTranslationLogReplacement = [];
+  const lastCsvTranslationLogReplacementClean = [];
 
-      while(replaceStrings[k]!= undefined){
-
-        if (csvTranslationCanceled===true){
-          break rawStringLoop1
-        }
-
-        if(rawStrings[i].toString("hex").includes(searchStrings[k].toString("hex")) === true 
-        && searchStrings[k].toString("hex") != ""){
-
-            let tempReplaceString = rawStrings[i].toString("hex").replaceAll(`${searchStrings[k].toString("hex")}`,`${replaceStrings[k].toString("hex")}`)
-            tempReplaceString = Buffer.from(tempReplaceString,"hex")
-
-
-            translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            // console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            globalQApplication.processEvents()
-            
-          lastCsvTranslationLogReplacement[i] = tempReplaceString.toString("utf8").replace(/\x00\x00/g, '[CHECK]')
-          lastCsvTranslationLogReplacementClean[i] = tempReplaceString.toString("utf8").replace(/\x00/g,"")
-          lastCsvTranslationLogOriginal[i] = rawStrings[i].toString("utf8")
-
-          listWidget.setCurrentRow(i)
-          saveProgress(1,tempReplaceString)
-        }
-  
-        k=k+1;
-      }
-  
-      k=0;
-      i=i+1;
-
-      translatedStringsQProgressDialog.setValue(i)
-      globalQApplication.processEvents()
+  //Handles a successful string match: updates UI, caches data, logs translation, and saves progress
+  const processMatch = (i, k, replacement) => {
+    const hexKey = `${i}-${k}`;
+    if (!hexCache.has(hexKey)) {
+      hexCache.set(hexKey, {
+          label: `The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`,
+          replacement: replacement.toString("utf8")
+      });
     }
-  }else{
+    const cached = hexCache.get(hexKey);
+    
+    translatedStringsQProgressDialog.setLabelText(cached.label);
+    globalQApplication.processEvents();
+    
+    lastCsvTranslationLogReplacement[i] = cached.replacement.replace(/\x00\x00/g, '[CHECK]');
+    lastCsvTranslationLogReplacementClean[i] = cached.replacement.replace(/\x00/g, "");
+    lastCsvTranslationLogOriginal[i] = rawStrings[i].toString("utf8");
+    
+    listWidget.setCurrentRow(i);
+    
+    saveProgress(true, replacement);
+  };
 
-    rawStringLoop2:
-    while(rawStrings[i] != undefined){
 
-      while(replaceStrings[k]!= undefined){
-        let tempSearchString= searchStrings[k].toString("hex")
-  
-        if (csvTranslationCanceled===true){
-          break rawStringLoop2
-        }
+  for (let i = 0; i < rawStringsLength; i++) {
+    if (csvTranslationCanceled) break;
 
-        if(rawStrings[i].length>Buffer.from(searchStrings[k].toString("hex").replaceAll("0a200a","0a0a"),"hex").length){
-          while(tempSearchString.replaceAll("0a200a","0a0a").length<rawStrings[i].toString("hex").length){
-            tempSearchString= tempSearchString +"00"
+    for (let k = 0; k < replaceStringsLength; k++) {
+      if (csvTranslationCanceled) break;
+
+      const currentContentRawHex = rawStrings[i].toString("hex");
+      const currentCSVSearchHex = isWordOnlyTranslation === true ? 
+      searchStrings[k].toString("hex") : 
+      preprocessedSearches[k];
+
+      if (currentCSVSearchHex && currentContentRawHex.includes(currentCSVSearchHex)||currentContentRawHex===currentCSVSearchHex) {
+        if (isWordOnlyTranslation) {
+          const tempReplaceString = Buffer.from(
+            currentContentRawHex.replaceAll(currentCSVSearchHex, replaceStrings[k].toString("hex")),
+            "hex"
+          );
+          processMatch(i, k, tempReplaceString);
+        } else{
+          //Usually currentRawHex will be bigger, so is neccesary to add some 00's to currentSearchHex
+          if(currentContentRawHex.length>=currentCSVSearchHex.length){
+            let tempCurrentSearchHex = currentCSVSearchHex
+
+            for(let m = 0;currentContentRawHex.length>tempCurrentSearchHex.length;m++){
+              tempCurrentSearchHex = tempCurrentSearchHex+"00"
+            }
+
+            if(currentContentRawHex === tempCurrentSearchHex){
+              processMatch(i, k, replaceStrings[k]);
+            }
+            else if(currentContentRawHex.replace(/0a(?!.*0a)/,"00")===tempCurrentSearchHex){
+              processMatch(i, k, replaceStrings[k]);
+            }
           }
         }
-  
-        if(rawStrings[i].toString("hex").includes(searchStrings[k].toString("hex").replaceAll("0a200a","0a0a")+"00") === true 
-          && searchStrings[k].toString("hex") != ""
-          && rawStrings[i].toString("hex")===tempSearchString.replaceAll("0a200a","0a0a")){
-        
-
-            translatedStringsQProgressDialog.setLabelText(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            // console.log(`The string #${i+1} in this section of the file \nmatch with the csv string #${k+1}\ntranslating to:\n\n${replaceStrings[k]}`)
-            globalQApplication.processEvents()
-
-          lastCsvTranslationLogReplacement[k]= replaceStrings[k].toString("utf8").replace(/\x00\x00/g,"[CHECK]")
-          lastCsvTranslationLogReplacementClean[k] = replaceStrings[k].toString("utf8").replace(/\x00/g,"")
-          lastCsvTranslationLogOriginal[k] = searchStrings[k].toString("utf8")
-
-
-          listWidget.setCurrentRow(i)
-          saveProgress(1,replaceStrings[k])
-        }
-  
-        k=k+1;
-      }
-  
-      k=0;
-      i=i+1;
-
-
-      translatedStringsQProgressDialog.setValue(i)
-      globalQApplication.processEvents()
-
-    }
-    if(pointer1AddressDecimal!="" &&csvTranslationMode===true){
-      console.log("csv Transladion end 1")
-      csvTranslationMode = false
-      let rawLenght1 = rawStrings.length
-      saveAndPrepare()
-      let rawLenght2 = rawStrings.length
-
-      if(rawLenght1>rawLenght2){
-
-        errorMessageBox.setText(`The process ended with fewer strings compared to\nwhen its tarted, please double-check the last\nstrings and pointers there are maybe some pointers\nduplicated.`)
-        errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-        if(endReached===true){
-
-          return
-        }
-      }
-
-    }else if(pointer1AddressDecimal==="" &&csvTranslationMode===true){
-      console.log("csv Transladion end 2")
-      csvTranslationMode = false
-      let rawLenght1 = rawStrings.length
-      saveAndPrepare2()
-      let rawLenght2 = rawStrings.length
-
-      if(rawLenght1>rawLenght2){
-
-        errorMessageBox.setText(`The process ended with fewer strings compared to\nwhen its tarted, please double-check the last\nstrings and pointers there are maybe some pointers\nduplicated.`)
-        errorMessageBox.setWindowTitle("Warning, check your last pointers/strings")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-        if(endReached===true){
-    
-          return
-        }
       }
     }
+
+    translatedStringsQProgressDialog.setValue(i);
+    globalQApplication.processEvents();
   }
 
-  const duplicates = lastCsvTranslationLogReplacementClean.filter((item, index) => index !== lastCsvTranslationLogReplacementClean.indexOf(item))
+  if (!isWordOnlyTranslation && pointer1AddressDecimal !== "" && csvTranslationMode) {
+    handlePostTranslation(endReached, true);
+  } else if (!isWordOnlyTranslation && csvTranslationMode) {
+    handlePostTranslation(endReached, false);
+  }
 
-  if(lastCsvTranslationLogReplacementClean.length-duplicates.length!=lastCsvTranslationLogReplacement.length){
+  validateResults(
+    lastCsvTranslationLogReplacementClean, 
+    lastCsvTranslationLogReplacement, 
+    endReached
+  );
 
-    let needsCheck = lastCsvTranslationLogReplacement.filter((replacement) => replacement.includes("[CHECK]"))
 
-    needsCheck = needsCheck.map(function(x) {return x.replace(/\x00/g,"")})
-    needsCheck = needsCheck.map(function(x) {return x.replace("[CHECK]","")})
+  //Handles post-translation cleanup and validation when using csv translation full string mode
+  //Checks if string count changed and shows warning if needed
+  function handlePostTranslation(endReached, usePointers) {
+    const rawLength1 = rawStrings.length;
 
-    if(needsCheck.length!=0&&duplicates.length===0){
-
-      errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText("The task finished with some results that may be wrong.")
-      errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n").replaceAll("[CHECK]","")}`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      errorMessageBox.setDetailedText("Task completed.")
-      if(endReached===true){
-
-        return
-      }
-    }else if(needsCheck.length===0&&duplicates.length!=0){
-
-      errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText("The task finished with some results that may be wrong.")
-      errorMessageBox.setDetailedText(`The following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      errorMessageBox.setDetailedText("Task completed.")
-      if(endReached===true){
-
-        return
-      }
+    if(mibListObjsData.length>0){
+      usePointers ? saveAndPrepare(false) : saveAndPreparePointerless(false);
     }else{
+      usePointers ? saveAndPrepare(true) : saveAndPreparePointerless(true);
+    }
 
-      errorMessageBox.setWindowTitle("Warning")
-      errorMessageBox.setText("The task finished with some results that may be wrong.")
-      errorMessageBox.setDetailedText(`The following string(s) were translated at least\ntwo times, maybe they need a manual check\n\n${needsCheck.join(";").replaceAll(";","\n\n")}\n\nThe following string(s) are duplicated, they\nneed a manual check\n\n${duplicates.join(";").replaceAll(";","\n\n")}`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      errorMessageBox.setDetailedText("Task completed.")
-      if(endReached===true){
+    const rawLength2 = rawStrings.length;
 
-        return
-      }
+    if (rawLength1 > rawLength2) {
+        showWarning(
+          "Warning, check your last pointers/strings",
+          `The process ended with fewer strings compared to\nwhen it started, please double-check the last\nstrings and pointers there are maybe some pointers\nduplicated.`,
+          endReached
+        );
+    }
+    csvTranslationMode = false;
+  }
+
+  //Checks for duplicates and strings that need review, shows appropriate warnings
+  function validateResults(cleanLogs, replacementLogs, endReached) {
+    const duplicates = cleanLogs.filter((item, index) => cleanLogs.indexOf(item) !== index);
+    const needsCheck = replacementLogs
+    .filter(replacement => replacement?.includes("[CHECK]"))
+    .map(x => x?.replace(/\x00/g,"")?.replace("[CHECK]",""));
+
+    if (duplicates.length || needsCheck.length) {
+      showDetailedWarning(duplicates, needsCheck, endReached);
+    }
+
+    if (endReached) {
+      showSimpleMessage("Task completed", "Task Completed");
     }
   }
 
-  if(endReached===true){
+  //Shows simple warning message box
+  function showWarning(title, text, endReached) {
+    errorMessageBox.setWindowTitle(title);
+    errorMessageBox.setText(text);
+    errorMessageButton.setText("OK".padStart(40).padEnd(40));
+    errorMessageBox.exec();
+    if (endReached) return;
+  }
 
-    errorMessageBox.setWindowTitle("Task completed")
-    errorMessageBox.setText(`Task Completed`)
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.show()
+  //Shows detailed warning with list of duplicates and strings needing review
+  function showDetailedWarning(duplicates, needsCheck, endReached) {
+    let detailedText = "";
+    if (needsCheck.length) {
+      detailedText += `The following string(s) were translated at least\ntwo times:\n\n${needsCheck.join("\n\n")}\n\n`;
+    }
+    if (duplicates.length) {
+      detailedText += `Duplicated strings needing check:\n\n${duplicates.join("\n\n")}`;
+    }
+
+    errorMessageBox.setWindowTitle("Warning");
+    errorMessageBox.setText("The task finished with results that may need review");
+    errorMessageBox.setDetailedText(detailedText);
+    errorMessageButton.setText("OK".padStart(40).padEnd(40));
+    errorMessageBox.exec();
+    errorMessageBox.setDetailedText("Task completed.");
+    if (endReached) return;
+  }
+
+  //Shows simple completion message (non-modal)
+  function showSimpleMessage(title, text) {
+    errorMessageBox.setWindowTitle(title);
+    errorMessageBox.setText(text);
+    errorMessageButton.setText("OK".padStart(40).padEnd(40));
+    errorMessageBox.show();
   }
 }
 
@@ -2131,7 +1688,7 @@ function sleep(ms) {
 }
 
 //Create and manage the different options of the selection window for the "export to csv" button
-function exportAllSelection(){
+function exportAllSelectionScreen(){
 
   const exportAllSelectionDialog = new QDialog()
   const exportAllSelectionRow1 = new QWidget()
@@ -2164,7 +1721,7 @@ function exportAllSelection(){
   exportAllSelectionRow1Layout.addWidget(exportAllSelectionStringsAndMoreButton)
   exportAllSelectionMiddleRowLayout.addWidget(exportAllCheckButton,0,132)
 
-  if(pointersTableMode===false){
+  if(pointersTableModeON===false){
 
     const exportAllSelectionAllStringsButton = new QPushButton()
     const exportAllSelectionAllStringsAndMoreButton = new QPushButton()
@@ -2176,25 +1733,23 @@ function exportAllSelection(){
     exportAllSelectionDialogLayout.addWidget(exportAllSelectionMiddleRow)
     exportAllSelectionDialogLayout.addWidget(exportAllSelectionRow2)
 
-
-
     exportAllSelectionStringsAndMoreButton.addEventListener("clicked",function (){
-      exportAll(0,exportAllCheckButton.isChecked())
+      exportToCSVManager(0,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
     exportAllSelectionStringsButton.addEventListener("clicked",function (){
-      exportAll(1,exportAllCheckButton.isChecked())
+      exportToCSVManager(1,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
 
     exportAllSelectionAllStringsButton.addEventListener("clicked",function (){
-      exportAll(2,exportAllCheckButton.isChecked())
+      exportToCSVManager(2,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
     exportAllSelectionAllStringsAndMoreButton.addEventListener("clicked",function (){
-      exportAll(3,exportAllCheckButton.isChecked())
+      exportToCSVManager(3,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
 
@@ -2225,7 +1780,7 @@ function exportAllSelection(){
 
     exportAllSelectionDialog.exec()  
 
-  }else if(pointersTableMode===true){
+  }else if(pointersTableModeON===true){
 
     exportAllSelectionRow2.setLayout(exportAllSelectionRow2Layout)
     const exportAllSelectionStringsInFolderButton = new QPushButton()
@@ -2250,22 +1805,22 @@ function exportAllSelection(){
     exportAllSelectionAllInFolderButton.setToolTip("All")
   
     exportAllSelectionStringsAndMoreButton.addEventListener("clicked",function (){
-      exportAll(0,exportAllCheckButton.isChecked())
+      exportToCSVManager(0,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
     exportAllSelectionStringsButton.addEventListener("clicked",function (){
-      exportAll(1,exportAllCheckButton.isChecked())
+      exportToCSVManager(1,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
     exportAllSelectionStringsInFolderButton.addEventListener("clicked",function(){
-      exportAll(2,exportAllCheckButton.isChecked())
+      exportToCSVManager(2,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
     exportAllSelectionAllInFolderButton.addEventListener("clicked",function(){
-      exportAll(3,exportAllCheckButton.isChecked())
+      exportToCSVManager(3,exportAllCheckButton.isChecked())
       exportAllSelectionDialog.close(true)
     })
   
@@ -2275,177 +1830,371 @@ function exportAllSelection(){
   
     exportAllSelectionDialog.exec()
   }
-  
 }
 
-//Self-explanarory
-function exportOnlyStringsOfSection(dataToExport,addFileName){
-  let i = 0
-
-  if(addFileName===true){
-    dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
-  }
-  while (rawStrings[i]!= undefined ){
+//Generates CSV export with UTF-8 BOM, optional section name and addresses
+//Splits multi-line strings into separate rows and sanitizes semicolons
+function exportStringsAndAddressOfSection(addFileName, exportAddressToo) {
+  let dataToExport = [];
+  const header = exportAddressToo? "String;addressOfEachString\n":"String\n"
+  dataToExport[0] = Buffer.from("efbbbf", "hex") + header
+  let i = 0;
+  let l = 1;
   
-    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
+  if(addFileName === true) {
+    dataToExport[l] = `# ${sectionNameLineEdit.text()}\n`;
+    l++;
+  }
+
+  while (rawStrings[i] != undefined) {
+    const text = checkForBlankSpaces(listWidget.item(i).text());
+    const address = addressOfEachString[i].toString("hex");
     
-    i=i+1
-  }
-  return dataToExport
-}
-
-//Self-explanarory
-function exportStringsAndAddressOfSection(dataToExport,addFileName){
-  
-  if(addFileName===true){
-    dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
-  }
-
-  let i = 0
-  while (rawStrings[i]!= undefined ){
-  
-    dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
+    const lines = text.includes('\r\n')?text.split('\r\n'):text.split('\n')
     
-    dataToExport = dataToExport + ";"
-
-    dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n`
-
-    i=i+1
+    for (let j = 0; j < lines.length; j++) {
+      const lineText = checkForSemicolons(lines[j], 0);
+      
+      if (j === 0) {
+        dataToExport[l] = `${lineText}` + (exportAddressToo ? `;${address}\n` : '\n');
+      } else {
+        dataToExport[l] = `${lineText}\n`;
+      }
+      l++;
+    }
+    
+    dataToExport[l] = '\n';
+    l++;
+    i++;
   }
-  return dataToExport
+
+  return dataToExport.join("");
 }
 
-//Self-explanarory
-function exportStringsFromAllSections(dataToExport,options,addFileName){
+function exportStringsFromAllSections(options, addFileName) {
+  let dataToExport = [];
+  dataToExport[0] = Buffer.from("efbbbf", "hex") + "Strings\n";
+  let l = 1;
   
-  dataToExport = []
-  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
-
-  modeVariable = 1
-  let i = 0
-  specialMode =true
-  let l =0
-  goToStart()
-  saveAndPrepare2()
-
-  while(stopProcess ===false){
-    i= 0
-
-    if(addFileName===true){
-      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
-    }
-
-    while (rawStrings[i]!= undefined &&skipThisSection===false){
-
-      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
-      
-      i=i+1
-    }
-    if(skipThisSection===false){
-      l=l+1
-      dataToExport[l] = ""
-    }
-
-    // dataToExport[l] = String(dataToExport[l]).replaceAll("undefined","")
-    skipThisSection=false
-    plus1(pointersTableMode,options)
+  sectionPaginationPointerFlag = 1;
+  csvInfoGatheringMode = true;
+  goToFirstSection();
+  
+  if(mibListObjsData.length === 0) {
+    saveAndPreparePointerless(true);
   }
-  
-  return dataToExport
+
+  while(stopCsvInfoGatheringMode === false) {
+    let i = 0;
+
+    if(addFileName === true && !notCorrectDataSkipThisSection) {
+      dataToExport[l] = `# ${sectionNameLineEdit.text()}\n`;
+      l++;
+    }
+
+    while(rawStrings[i] !== undefined && !notCorrectDataSkipThisSection) {
+      const text = checkForBlankSpaces(listWidget.item(i).text());
+      const lines = text.includes('\r\n')?text.split('\r\n'):text.split('\n')
+      
+      for(let j = 0; j < lines.length; j++) {
+        const lineText = checkForSemicolons(lines[j], 0);
+        dataToExport[l] = `${lineText}\n`;
+        l++;
+      }
+      
+      dataToExport[l] = '\n';
+      l++;
+      i++;
+    }
+
+    if(!notCorrectDataSkipThisSection) {
+      notCorrectDataSkipThisSection = false;
+      plus1(pointersTableModeON, options);
+    } else {
+      notCorrectDataSkipThisSection = false;
+    }
+  }
+
+  return dataToExport.join("");
 }
 
-//Self-explanarory
-function exportStringsAndAddressFromAllSections(dataToExport,options,addFileName){
+//Navigates through all sections (using section pagination) and exports their strings
+//Skips invalid sections, includes section names,
+//Continues until stop flag is set
+function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
+  let dataToExport = [];
+  dataToExport[0] = Buffer.from("efbbbf", "hex") + 
+  "String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n";
   
-  dataToExport = []
-  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+  let i = 0;
+  let l = 1;
+  
+  csvInfoGatheringMode = true;
+  if(options===3){
+    goToFirstSection();
+  }
+  if(mibListObjsData.length === 0) {
 
-  modeVariable = 1
+    firstPointerAddressLineEdit.text() ?
+    saveAndPrepare(true) :
+    saveAndPreparePointerless(true);
+  }
 
-  let i = 0
-  let l =0
+  while(stopCsvInfoGatheringMode === false) {
+    i = 0;
 
-  specialMode =true
-
-  goToStart()
-  saveAndPrepare2()
-
-  while(stopProcess ===false){
-    i= 0
-
-    if(addFileName===true){
-      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
+    if(addFileName && !notCorrectDataSkipThisSection) {
+      dataToExport[l] = `# ${sectionNameLineEdit.text()}\n`;
+      l++;
     }
-      while (rawStrings[i]!= undefined &&skipThisSection===false){
 
+    while(rawStrings[i] !== undefined && !notCorrectDataSkipThisSection) {
+      const textToSplit = checkForBlankSpaces(listWidget.item(i).text())
+      const textLines = textToSplit.includes('\r\n')?textToSplit.split('\r\n'):textToSplit.split('\n')
+      const address = addressOfEachString[i].toString("hex");
 
-        dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
       
-        dataToExport[l] = dataToExport[l] + ";"
+      // Procesar cada línea del string
+      for (let j = 0; j < textLines.length; j++) {
+        let line = `${checkForSemicolons(textLines[j], 0)};`;
+        
+        // Solo mostrar datos de dirección/pointers en la primera línea
+        if (j === 0) {
+          line += `${address};`;
+          
+          if(firstPointerAddressLineEdit.text()) {
 
-        dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n`
+            line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`
+            line += `${addressOfEachPointer[i]};`
+            line += `${pointersHexValues[i].toString("hex").toUpperCase()}`
+            
+            if(rawStrings[i+1] === undefined) {
+              let fullPointers = [];
+              let k = 0;
+              while(extractedPointersIn4[k] !== undefined) {
+                fullPointers.push(extractedPointersIn4[k].toString("hex").toUpperCase());
+                k++;
+              }
+              if(fullPointers.length > 0) {
+                line += `;${fullPointers.join(';')}`;
+              }
+            }
+          }
+        }
+        if(j+1 === textLines.length){
+          line = line + '\n'
+        }
+        dataToExport[l] = line + '\n';
+        l++;
+      }
+      
+      i++;
+    }
 
-        i=i+1
+    if(options === 0) {
+      return dataToExport.join("");
+    }
+
+    if(!notCorrectDataSkipThisSection) {
+      //dataToExport[l] = '\n';
+      l++;
+    }
+    plus1(pointersTableModeON, options);
+  }
+  
+  return dataToExport.join("");
+}
+
+//Routes export requests to appropriate handler based on export mode
+// Mode 0: full data (strings, addresses, pointers)
+// Mode 1: strings only
+// Mode 2: All PTs strings only (delegates to handleMultiPTExport)
+// Mode 3: All PTs full data (delegates to handleMultiPTExport)
+function handlePointersTableExport(exportOptionNumber, addFileName) {
+
+  let dataToExport = [];
+  dataToExport[0] = Buffer.from("efbbbf", "hex")+ 
+  (exportOptionNumber?"String\n"
+  :"String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n");
+
+  let i = 0;
+  let l = 1;
+  let m = 0
+  csvInfoGatheringMode = true;
+  goToFirstSection()
+  //Export all from this .pt
+  if (exportOptionNumber === 0) {
+    while (m <= sectionedCurrentContent.length) {
+      i = 0;
+
+      if (addFileName&& !notCorrectDataSkipThisSection) {
+        if (dataToExport[l] === undefined) dataToExport[l] = "";
+        dataToExport[l] = `# ${sectionNameLineEdit.text()} ${sectionNameNumber.text()}\n`;
+        l++;
+      }
+      
+      while (rawStrings[i] !== undefined&& !notCorrectDataSkipThisSection) {
+        const textToSplit = checkForBlankSpaces(listWidget.item(i).text())
+        const textLines = textToSplit.includes('\r\n')?textToSplit.split('\r\n'):textToSplit.split('\n')
+
+        let line = ''
+        for (let j = 0; j < textLines.length; j++) {
+
+          line = `${checkForSemicolons(textLines[j], 0)};`;
+          if(j===0){
+            line += `${addressOfEachString[i].toString("hex")};`;
+            line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`;
+            line += `${addressOfEachPointer[i]};`;
+            line += `${pointersHexValues[i].toString("hex").toUpperCase()}`;
+
+            if (rawStrings[i + 1] === undefined) {
+              let fullPointers = [];
+              let k = 0;
+              while (extractedPointersIn4[k] !== undefined) {
+                fullPointers.push(extractedPointersIn4[k].toString("hex").toUpperCase());
+                k++;
+              }
+              if(fullPointers.length > 0) {
+                line += `;${fullPointers.join(';')}`;
+              }
+            }
+          }
+
+          if(j+1 === textLines.length){
+            line = line + '\n'
+          }
+          dataToExport[l] = line + '\n';
+          l++;
+        }
+        i++;
       }
 
-      if(skipThisSection===false){
-        l=l+1
-        dataToExport[l] = ""
+      if(!notCorrectDataSkipThisSection) {
+        //dataToExport[l] = '\n';
+        m++;
       }
-    skipThisSection=false
-    plus1(pointersTableMode,options)
+      plus1(pointersTableModeON);
+    }
+  } 
+  //Export all strings of this .pt
+  else if (exportOptionNumber === 1) {
+    while (m != sectionedCurrentContent.length) {
+      i = 0;
+      if (addFileName) {
+        if (dataToExport[l] === undefined) dataToExport[l] = "";
+        dataToExport[l] += `# ${sectionNameLineEdit.text()} ${sectionNameNumber.text()}\n`;
+      }
+      
+      while (rawStrings[i] !== undefined) {
+        dataToExport[l] += checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()), 0) + `\n\n`;
+        i++;
+      }
+      m++;
+      plus1(pointersTableModeON);
+    }
+  }
+  //Export strings of all .pt
+  else if (exportOptionNumber === 2) {
+    return handleMultiPTExport(addFileName, false);
+  }
+  //Export all from all .pt
+  else if (exportOptionNumber === 3) {
+    return handleMultiPTExport(addFileName, true);
   }
   
-  return dataToExport
+  return dataToExport;
 }
 
-//Self-explanarory. "And more" means Hex values, adress of each strings and address of pointers.
-function exportStringsAndMoreFromAllSections(dataToExport,options,addFileName){
-  dataToExport = []
-  dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
+//Manages multiple .pt files
+async function handleMultiPTExport(addFileName, includePointers) {
+  const ptFilesList = await getPTFilesList();
+  if (!ptFilesList) return [];
 
-  let i = 0
-  let l =0
-  
-  specialMode =true
+  const dataToExportFinal = [];
+  const dirPath = path.dirname(selectedPTFile);
 
-  goToStart()
-  saveAndPrepare()
-
-  while(stopProcess ===false){
-    i= 0
-
-    if(addFileName===true&&skipThisSection===false){
-      dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + "\n\n"
-    }
-    while (rawStrings[i]!= undefined&&skipThisSection===false){
-
-      dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
-      dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
-      dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
-      dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
-      dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
-
-      if(rawStrings[i+1]=== undefined){
-        let k = 0;
-        while(extractedPointersIn4[k] != undefined){
-
-
-          dataToExport[l] = dataToExport[l] + ";;;;;"
+  for (let m = 0; m < ptFilesList.length; m++) {
     
-          dataToExport[l] = dataToExport[l] + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
-          k= k+1;
+    let dataToExport = [];
+    selectedPTFile = `${dirPath}/${ptFilesList[m]}`;
+    loadPointersTable(selectedPTFile);
+
+    dataToExport[0] = Buffer.from("efbbbf", "hex") + 
+    (includePointers 
+    ? "String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n"
+    : "String\n");
+
+    let l = 1;
+
+    //Sections
+    for (let n = 0; n < sectionedCurrentContent.length; n++) {
+      if (addFileName && !notCorrectDataSkipThisSection) {
+        dataToExport[l] = `# ${sectionNameLineEdit.text()} ${sectionNameNumber.text()}\n`;
+        l++;
+      }
+
+      //String
+      for (let i = 0; i < rawStrings.length && !notCorrectDataSkipThisSection; i++) {
+        const textToSplit = checkForBlankSpaces(listWidget.item(i).text())
+        const textLines = textToSplit.includes('\r\n')?textToSplit.split('\r\n'):textToSplit.split('\n')
+        
+        //String lines
+        for (let j = 0; j < textLines.length; j++) {
+          let line = `${checkForSemicolons(textLines[j], 0)}`;
+          
+          if (j === 0 && includePointers) {
+            line += `;${addressOfEachString[i].toString("hex")}`;
+            line += `;${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")}`;
+            line += `;${addressOfEachPointer[i]}`;
+            line += `;${pointersHexValues[i].toString("hex").toUpperCase()}`;
+
+            if (i === rawStrings.length - 1) {
+              const fullPointers = [];
+              for (let k = 0; extractedPointersIn4[k] !== undefined; k++) {
+                fullPointers.push(extractedPointersIn4[k].toString("hex").toUpperCase());
+              }
+              if (fullPointers.length > 0) {
+                line += `;"${fullPointers.join(';')}"`;
+              }
+            }
+          }
+
+          if(j+1 === textLines.length){
+            line = line + '\n'
+          }
+          dataToExport[l] = line + '\n';
+          l++;
         }
       }
-      i= i+1;
+
+      if (!notCorrectDataSkipThisSection) {
+        dataToExport[l] = '\n';
+        l++;
+      }
+      plus1(pointersTableModeON);  
     }
-    if(skipThisSection===false){
-      l=l+1
-      dataToExport[l] = ""
-    }
-    plus1(pointersTableMode,options)
+    dataToExportFinal[m] = dataToExport.join("");
   }
-  return dataToExport
+
+  return dataToExportFinal;
+}
+
+//Obtain list of .pt files
+async function getPTFilesList() {
+  try {
+    const dirPath = path.dirname(selectedPTFile)
+    const list = await fs.promises.readdir(dirPath);
+    return list.filter(file => 
+    file.endsWith('.pt') && 
+    !fs.lstatSync(`${dirPath}/${file}`).isDirectory()
+    );
+  } catch (err) {
+  errorMessageBox.setWindowTitle("Error");
+  errorMessageBox.setText("ERROR! The folder doesn't exist or there are not files.");
+  errorMessageButton.setText("                                                Ok                                              ");
+  errorMessageBox.exec();
+  return null;
+  }
 }
 
 //Check if the given string has semilcolons, if found one, add "" to the line where is the semicolon.
@@ -2464,9 +2213,9 @@ function checkForSemicolons(listWidgetString,style){
 
     while(listWidgetString[i]!=undefined){
 
-      if(listWidgetString[i].includes(";") &&
-      listWidgetString[i][0]!=`"` &&
-      listWidgetString[i][listWidgetString[i]-1]!=`"`){
+      if(listWidgetString[i].includes(";")
+      &&listWidgetString[i][0]!=`"`
+      &&listWidgetString[i][listWidgetString[i]-1]!=`"`){
         
         listWidgetString[i] = `"${listWidgetString[i]}"`
 
@@ -2511,318 +2260,114 @@ function checkForSemicolons(listWidgetString,style){
   return listWidgetString
 }
 
-//Check if a given string has several newlines together, if that is the case, add spaces between them.
-function checkForBlankSpaces(listWidgetString){
-
-  if(listWidgetString.includes("\n\n\n\n\n")===true){
-
-    listWidgetString = listWidgetString.replaceAll("\n\n\n\n\n","\n \n \n \n \n")
-  }
-
-  if(listWidgetString.includes("\n\n\n\n")===true){
-
-    listWidgetString = listWidgetString.replaceAll("\n\n\n\n","\n \n \n \n")
-  }
-
-  if(listWidgetString.includes("\n\n\n")===true){
-
-    listWidgetString = listWidgetString.replaceAll("\n\n\n","\n \n \n")
-  }
+//Check if a given string contains multiple newlines consecutively. If so, add spaces between them.
+function checkForBlankSpaces(listWidgetString) {
+  if (!listWidgetString) return listWidgetString;
   
-  if(listWidgetString.includes("\n\n")===true){
+  let result = listWidgetString.replace(/(\n){2,}/g, match => 
+    match.split('').join(' ')
+  );
 
-    listWidgetString = listWidgetString.replaceAll("\n\n","\n \n")
+  if (result.startsWith('\n')) {
+    result = ' ' + result;
+  }
+  if (result.endsWith('\n')) {
+    result = result + ' ';
   }
 
-  if(listWidgetString[0]==="\n"){
-    listWidgetString  = ` ` +listWidgetString
-  }
-
-  
-  if(listWidgetString[listWidgetString.length-1]==="\n"){
-    listWidgetString  = listWidgetString + ` `
-  }
-
-  return listWidgetString
+  return result;
 }
 
 //Makes a csv that contains the strings and pointers from currentContent.
-async function exportAll(options,addFileName){
-let i = 0
+async function exportToCSVManager(exportOptionNumber,addFileName){
 
-let dataToExport = Buffer.from("efbbbf0d0a", "hex")
-let dataToExportFinal = []
-  if(pointersTableMode===false){
+  let exportedData = Buffer.from("efbbbf0d0a", "hex")
+  let exportedDataFinal = []
+  if(!pointersTableModeON){
 
     if(pointer1AddressDecimal === ""){
 
-      //All in this section
-      if(options===0){
+      //Address and strings in this section
+      if(exportOptionNumber===0){
+        exportedData = exportStringsAndAddressOfSection(addFileName,true)
 
-        dataToExport = exportStringsAndAddressOfSection(dataToExport,addFileName)
-
-      //Strings in this section
-      }else if(options===1){
-
-        dataToExport = exportOnlyStringsOfSection(dataToExport,addFileName)
+      //Only Strings in this section
+      }else if(exportOptionNumber===1){
+        exportedData = exportStringsAndAddressOfSection(addFileName,false)
   
       //Strings from all sections
-      }else if(options===2){
-
-        dataToExport = exportStringsFromAllSections(dataToExport,options,addFileName)
+      }else if(exportOptionNumber===2){
+        exportedData = exportStringsFromAllSections(exportOptionNumber,addFileName)
       
-        //Strings and address from all sections
-      }else if(options===3){
-
-        dataToExport = exportStringsAndAddressFromAllSections(dataToExport,options,addFileName)
+      //Strings and address from all sections
+      }else if(exportOptionNumber===3){
+        sectionPaginationPointerFlag = 1
+        exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
       }
 
     }else if (pointer1AddressDecimal != ""){
-  
-      if(options===0){
-        if(addFileName===true){
-          dataToExport = dataToExport + sectionNameLineEdit.text() + "\n\n"
-        }
-        while (rawStrings[i]!= undefined){
-  
-          dataToExport = dataToExport + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
-          dataToExport = dataToExport + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
-          dataToExport = dataToExport + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
-          dataToExport = dataToExport + addressOfEachPointer[i] + `\n\n`+ ";;;;"
-          dataToExport = dataToExport + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
-    
-          if(rawStrings[i+1]=== undefined){
-            let k = 0;
-            while(extractedPointersIn4[k] != undefined){
-    
-              dataToExport = dataToExport + ";;;;;"
-        
-              dataToExport = dataToExport + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
-              k= k+1;
-            }
-          }
-          i= i+1;
-        }
-      }else if(options===1){
+      //Export all of this section
+      if(exportOptionNumber===0){
+      exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
+      
+      //Export strings of this section
+      }else if(exportOptionNumber===1){
+        exportedData = exportStringsAndAddressOfSection(addFileName,false)
 
-        dataToExport = exportOnlyStringsOfSection(dataToExport,addFileName)
-
-      }else if(options===2){
-        dataToExport = exportStringsFromAllSections(dataToExport,options,addFileName)
+      //Export strings of all sections
+      }else if(exportOptionNumber===2){
+        exportedData = exportStringsFromAllSections(exportOptionNumber,addFileName)
   
-      }else if(options===3){
-        modeVariable =2
-        dataToExport = exportStringsAndMoreFromAllSections(dataToExport,options,addFileName)
+      //Export all of all sections
+      }else if(exportOptionNumber===3){
+        sectionPaginationPointerFlag = 2
+        exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
       }
     }
-    //Pointers Table Mode ON
-  }else if(pointersTableMode===true){
-    specialMode =true
-    dataToExport = []
-    dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
-    let l =0
-    goToStart()
+  }else if (pointersTableModeON) {
 
-    if(options===0){
-
-      while(l!=sectionedCurrentContent.length){
-          i= 0
-          if(addFileName===true){
-            if(dataToExport[l]===undefined){
-              dataToExport[l]= ""
-            }
-            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
-          }
-        while (rawStrings[i]!= undefined ){
-    
-    
-          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
-          dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
-          dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
-          dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
-          dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
-    
-          if(rawStrings[i+1]=== undefined){
-            let k = 0;
-            while(extractedPointersIn4[k] != undefined){
-    
-              dataToExport[l] = dataToExport[l] + ";;;;;"
-        
-              dataToExport[l] = dataToExport[l] + extractedPointersIn4[k].toString("hex").toUpperCase() + `\n\n`
-              k= k+1;
-            }
-          } 
-          i=i+1
-        }
-        if(skipThisSection===false){
-          l=l+1
-          dataToExport[l] = ""
-        }
-        plus1(pointersTableMode)
-      }
-
-    }else if(options===1){
-
-      while(l!=sectionedCurrentContent.length){
-          i= 0
-          if(addFileName===true){
-            if(dataToExport[l]===undefined){
-              dataToExport[l]= ""
-            }
-            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
-          }
-        while (rawStrings[i]!= undefined ){
-    
-    
-          dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
-            
-          i=i+1
-        }
-        l=l+1
-        plus1(pointersTableMode)
-      }
-
-    }else if(options===2){
-
-
-      let list = []
-      let ptFilesList = []
-
-      list = await new Promise((resolve, reject) => {
-        return fs.readdir('./Pointers Tables/', (err, filenames) => err != null ? reject(err) : resolve(filenames))
-      })
-
-      if(list[0]===undefined){
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText("ERROR! The folder doesn't exist or there are not files.")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-        return
-      } else{
-        let i =0
-        list.forEach(file => {
-          if(file.substring(file.length-3,file.length) ===".pt"&&fs.lstatSync(`./Pointers Tables/${file}`).isDirectory()===false){
-            ptFilesList[i] = file
-            i= i+1
-          }
-        })
-      }
-
-      let m = 0
-      while(ptFilesList[m]!= undefined){
-        selectedPTFile = `./Pointers Tables/${ptFilesList[m]}`
-        loadPointersTable(selectedPTFile)
-        l =0
-        dataToExport = []
-
-        if(m===0){
-          dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
-        }
-
-        while(l!=sectionedCurrentContent.length){
-            i= 0
-            if(dataToExport[l]===undefined){
-              dataToExport[l]= ""
-            }
-            if(addFileName===true){
-              dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
-            }
-
-          while (rawStrings[i]!= undefined ){
-
-            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n`
-              
-            i=i+1
-          }
-          if(skipThisSection===false){
-            l=l+1
-            dataToExport[l] = ""
-          }
-          plus1(pointersTableMode)
-        }
-        dataToExportFinal[m] = dataToExport.join("")
-        m=m+1
-      }
-
-    }else if(options===3){
-
-      let list = []
-      let ptFilesList = []
-
-      list = await new Promise((resolve, reject) => {
-        return fs.readdir('./Pointers Tables/', (err, filenames) => err != null ? reject(err) : resolve(filenames))
-      })
-
-      if(list[0]===undefined){
-        errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText("ERROR! The folder doesn't exist or there are not files.")
-        errorMessageButton.setText("                                                Ok                                              ")
-        errorMessageBox.exec()
-        return
-      } else{
-        let i =0
-        list.forEach(file => {
-          if(file.substring(file.length-3,file.length) ===".pt"&&fs.lstatSync(`./Pointers Tables/${file}`).isDirectory()===false){
-            ptFilesList[i] = file
-            i= i+1
-          }
-        })
-      }
-
-      let m = 0
-      while(ptFilesList[m]!= undefined){
-        selectedPTFile = `./Pointers Tables/${ptFilesList[m]}`
-        loadPointersTable(selectedPTFile)
-        l =0
-        dataToExport = []
-
-        if(m===0){
-          dataToExport[0] = Buffer.from("efbbbf0d0a", "hex")
-        }
-        
-        while(l!=sectionedCurrentContent.length){
-
-          if(dataToExport[l]===undefined){
-            dataToExport[l]= ""
-          }
-          if(addFileName===true){
-            dataToExport[l] = dataToExport[l] + sectionNameLineEdit.text() + ` ${sectionNameNumber.text()}`+ "\n\n"
-          }
-            i= 0
-          while (rawStrings[i]!= undefined ){
-      
-            dataToExport[l] = dataToExport[l] + checkForSemicolons(checkForBlankSpaces(listWidget.item(i).text()),0) + `\n\n` + ";"
-            dataToExport[l] = dataToExport[l] + addressOfEachString[i].toString("hex") + `\n\n` + ";;"
-            dataToExport[l] = dataToExport[l] + addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","") + `\n\n` + ";;;"
-            dataToExport[l] = dataToExport[l] + addressOfEachPointer[i] + `\n\n`+ ";;;;"
-            dataToExport[l] = dataToExport[l] + pointersHexValues[i].toString("hex").toUpperCase() + `\n\n`
-          
-            i=i+1
-          }
-          if(skipThisSection===false){
-            l=l+1
-            dataToExport[l] = ""
-          }
-          plus1(pointersTableMode)
-        }
-        dataToExportFinal[m] = dataToExport.join("")
-        m=m+1
-      }
+    if (exportOptionNumber < 2) {
+      exportedData = handlePointersTableExport(exportOptionNumber, addFileName);
+    } else {
+      exportedDataFinal = await handlePointersTableExport(exportOptionNumber, addFileName);
     }
   }
+
   
-  modeVariable =0
-  skipThisSection=false
-  stopProcess=false
-  specialMode= false
+  sectionPaginationPointerFlag =0
+  notCorrectDataSkipThisSection = false
+  stopCsvInfoGatheringMode=false
+  csvInfoGatheringMode= false
 
-  if(dataToExportFinal[0]===undefined){
+  if(exportedDataFinal[0]===undefined){
 
-    if(Array.isArray(dataToExport)===true){
-      dataToExport = dataToExport.join("")
+    if(Array.isArray(exportedData)===true){
+      exportedData = exportedData.join("")
     }
 
-    fs.writeFile(`./exportedData.csv`,`${dataToExport}`,{
+    fs.writeFile(`./exportedData_${Date.now()}.csv`,`${exportedData}`,{
+      encoding: "utf8",
+      flag: "w",
+      mode: 0o666
+    },(err) => {
+      if (err){
+        errorMessageBox.setWindowTitle("Error")
+        errorMessageBox.setText("ERROR! maybe the file is being used?")
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+      else{
+        errorMessageBox.setWindowTitle("Task completed")
+        errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
+        errorMessageButton.setText("                                                Ok                                              ")
+        errorMessageBox.exec()
+      }
+    })
+  }else{
+
+    exportedDataFinal = exportedDataFinal.join("")
+
+    fs.writeFile(`./exportedData_${Date.now()}.csv`,`${exportedDataFinal}`,{
       encoding: "utf8",
       flag: "w",
       mode: 0o666
@@ -2841,31 +2386,7 @@ let dataToExportFinal = []
         errorMessageBox.exec()
       }
     })
-  }else{
-
-    dataToExportFinal = dataToExportFinal.join("")
-
-      fs.writeFile(`./exportedData.csv`,`${dataToExportFinal}`,{
-        encoding: "utf8",
-        flag: "w",
-        mode: 0o666
-      },(err) => {
-    
-        if (err){
-          errorMessageBox.setWindowTitle("Error")
-          errorMessageBox.setText("ERROR! maybe the file is being used?")
-          errorMessageButton.setText("                                                Ok                                              ")
-          errorMessageBox.exec()
-        }
-        else{
-          errorMessageBox.setWindowTitle("Task completed")
-          errorMessageBox.setText(`The data has been exported to the root folder\nsucessfully.`)
-          errorMessageButton.setText("                                                Ok                                              ")
-          errorMessageBox.exec()
-        }
-      })
   }
-
 }
 
 //Depending of if Hide 0's from viewer is checked this function hide the 0's or not.
@@ -2874,211 +2395,58 @@ function hideShow(){
   hiddenPointers = 0;
   while(extractedPointersIn4[i]!= undefined){
     
-    if(pointersViewerlistWidget.item(i).text()==="00000000"&& pointersViewerButtonToHide00.isChecked()===true){
-      pointersViewerlistWidget.item(i).setHidden(true)
+    if(pointersViewerFull.item(i).text()==="00000000"&& pointersViewerButtonToHide00.isChecked()===true){
+      pointersViewerFull.item(i).setHidden(true)
       hiddenPointers = hiddenPointers+1;
     }
 
-    if(pointersViewerlistWidget.item(i).text()==="00000000"&& pointersViewerButtonToHide00.isChecked()===false){
-      pointersViewerlistWidget.item(i).setHidden(false)
+    if(pointersViewerFull.item(i).text()==="00000000"&& pointersViewerButtonToHide00.isChecked()===false){
+      pointersViewerFull.item(i).setHidden(false)
     }
     i=i+1;
   }
 
-  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${sharedPointers})`)
+  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${quantityOfSharedPointers})`)
 }
 
 //When a string is clicked in the main list widget this function search it hex values in the
 //pointers viewer, if found a match, is selected.
-function highlightPointers(){
+function highlightPointers(relocateMode = false){
   
   if(pointer1AddressDecimal!= ""){
     let i =0;
-    sharedPointers=1
+    quantityOfSharedPointers=1
 
-    pointersViewerForSharedPointersListWidget.clear()
-    pointersEditor.clear()
-    pointersEditorLabel.setText("#n")
+    while(extractedPointersIn4[i] != undefined){ //Search strings
 
-    while(extractedPointersIn4[i] != undefined){
-
-      if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersHexValues[listWidget.currentRow()].toString("hex").toUpperCase()){
-          
-        pointersViewerlistWidget.setCurrentRow(i)
+      if(pointersHexValues[listWidget.currentRow()]
+        &&extractedPointersIn4[i].toString("hex").toUpperCase() === pointersHexValues[listWidget.currentRow()].toString("hex").toUpperCase()){
+        
+        if(!relocateMode){
+          pointersEditor.clear()
+          pointersEditorLabel.setText("#n")
+          pointersViewerFull.setCurrentRow(i)
+        }
         break
-      }
 
-      else if(i+2>extractedPointersIn4.length){
+      }else if(i+2>extractedPointersIn4.length){
+
+        pointersEditor.clear()
+        pointersEditorLabel.setText("#n")
         errorMessageBox.setWindowTitle("Error")
         errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\nare you sure that both pointer addresses are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
+        return false
       }
       i=i+1;
     }
   }
 }
 
-//If there are enough 00's at the end of the string section that is being edited
-//this function makes the second 00 after the last string 20 (space)
-//then relocate that pointer to make it match with this "new string" and
-//finally add this new string to the main string list widget.
-function relocateToNewString(){
-
-  if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i) ===null){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("The new pointer values are not valid")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
-
-  }else if(numSpaceLeft<3){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Not enough space :/")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
-
-  }
-  let i =0;
-  let newStringAddressDecimal =""
-  while(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i] !="00"){
-
-    if(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+1] ===0 && currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2] ===0){
-
-      newStringAddressDecimal = (parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2).toString(16).toUpperCase()
-      break
-
-    }
-    i=i+1;
-  }
-
-  currentContent[parseInt(newStringAddressDecimal,16)] = 32
-
-
-  let firstPointerW = pointersViewerlistWidget.item(0).text()
-
-  let firstPointerValuesInDecimals =""
-  if(bigEndian.isChecked()===true){
-    firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntBE(0,Buffer.from(firstPointerW, "hex").length)
-  }else{
-    firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntLE(0,Buffer.from(firstPointerW, "hex").length)
-  }
-
-
-  i = 1;
-  let k = 0;
-
-  while(pointersHexValues[k] != undefined){
-    oldPointersHexValues[k] =  pointersHexValues[k]
-    k=k+1;
-  }
-
-  let differenceInDecimals = parseInt(newStringAddressDecimal,16)-parseInt(addressOfEachString[0],16)
-  let nextPointerInDecimals = firstPointerValuesInDecimals+differenceInDecimals;
-  let newPointerHexValues
-
-  if(bigEndian.isChecked()===true){
-
-    newPointerHexValues = nextPointerInDecimals.toString(16)
-
-  }else{
-
-    newPointerHexValues = nextPointerInDecimals.toString(16).padStart(firstPointerW.length, '0').match(/.{1,2}/g).reverse().join('') 
-    
-  }
-
-  k=0
-  //Add 00 to the right or left side of pointer.
-  if(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length
-  &&extractedPointersIn4[i]!= undefined){
-
-    while(k<Math.trunc(newStringAddressDecimal.toString(16).length/2)){
-      let left = false
-      let right = false
-  
-      if(extractedPointersIn4[0].toString("hex")[k] ==="0"){
-        left = true
-      }
-        
-      if(extractedPointersIn4[0].toString("hex")[extractedPointersIn4[0].toString("hex").length-k-1] ==="0"){
-        right = true
-      }
-  
-      if(left === true && right === false){
-          
-        while(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length){
-          newPointerHexValues =  "0" + newPointerHexValues
-        }
-  
-      }else if(left === false && right === true){
-          
-        while(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length){
-          newPointerHexValues = newPointerHexValues+ "0"
-        }
-      }
-      k=k+1
-    }
-  }
-  i=i+1
-
-  pointersEditor.setText(newPointerHexValues.toUpperCase())
-  saveEditedPointer()
-}
-
-//When a item in the pointers viewer is edited, needs to change it highlight to make it
-//match with it new values (same goes for shared pointers viewer), this
-//function does that and also saves the pointer changed in currentContent to the file.
-function saveEditedPointer(){
-
-  if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i) ===null){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("The new pointer values are not valid")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
-  }
-  extractedPointersIn4[oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]] =  Buffer.from(pointersEditor.text(),"hex")
-  pointersViewerForSharedPointersListWidget.currentItem().setText(pointersEditor.text())
-  pointersViewerlistWidget.item(oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]).setText(pointersEditor.text())
-  pointersViewerForSharedPointersListWidget.currentItem().setText(pointersEditor.text())
-
-  extractedPointers = Buffer.concat(extractedPointersIn4)
-
-  let tempCurrentContent = currentContent.toString("binary")
-  let tempExtractedPointers = extractedPointers.toString("binary")
-
-  tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
-  currentContent = Buffer.from(tempCurrentContent, "binary")
-  pointersViewerlistWidget.removeItemWidget(pointersViewerlistWidget.item(oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]))
-
-  if(pointersViewerForSharedPointersListWidget.currentRow()===0){
-    let pointerViewerListQWidget = new QWidget()
-    let pointerViewerListQWidgetLayout = new FlexLayout
-    pointerViewerListQWidget.setLayout(pointerViewerListQWidgetLayout)
-    let pointerViewerListQWidgetText = new QLabel
-    pointerViewerListQWidgetText.setText(pointersEditor.text())
-    pointerViewerListQWidgetText.setInlineStyle(`
-    color:red;
-    margin: 0 1 0 0;
-    `)
-    pointerViewerListQWidgetLayout.addWidget(pointerViewerListQWidgetText)
-    pointersViewerlistWidget.setItemWidget(pointersViewerlistWidget.item(oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]),pointerViewerListQWidget)
-  }else{
-    let pointerViewerListQWidget2 = new QWidget()
-    let pointerViewerListQWidgetLayout2 = new FlexLayout
-    pointerViewerListQWidget2.setLayout(pointerViewerListQWidgetLayout2)
-    let pointerViewerListQWidgetText2 = new QLabel
-    pointerViewerListQWidgetText2.setText(pointersEditor.text())
-    pointerViewerListQWidgetText2.setInlineStyle(`
-    color:midnightblue;
-    margin: 0 1 0 0;
-    `)
-    pointerViewerListQWidgetLayout2.addWidget(pointerViewerListQWidgetText2)
-    pointersViewerlistWidget.setItemWidget(pointersViewerlistWidget.item(oldMatchedSharedPointers[pointersViewerForSharedPointersListWidget.currentRow()]),pointerViewerListQWidget2)
-    sharedPointers=sharedPointers+1;
-  }
-
+//It saves the file. Or tries to.
+//Shows error dialog if file is in use or write fails
+function saveCurrentContent(){
   fs.writeFile(`${selectedFile}`,currentContent,{
     encoding: "binary",
     flag: "w",
@@ -3095,6 +2463,345 @@ function saveEditedPointer(){
       console.log("File written successfully\n");
     }
   })
+}
+
+//Returns {text, stringPosition, pointerPosition} for the currently selected string
+//text: raw string bytes up to first null
+//stringPosition: offset of string
+//pointerPosition: offset of pointer that references this string
+function currentStringSelectedData(){
+  if(listWidget.currentRow()===-1||pointersViewerFull.currentRow()===-1) return
+
+  const currentStringPositionInFile = parseInt(addressOfEachString[listWidget.currentRow()],16)
+  
+  let i = 0
+  for(i =0;currentContent[currentStringPositionInFile+i]!==0;++i){}
+
+  const outputText = Buffer.from(currentContent.subarray(currentStringPositionInFile,currentStringPositionInFile+i))
+  const pointerPositionInFile = addressOfEachPointer[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]]
+  
+
+  return {text:outputText,stringPosition:currentStringPositionInFile,pointerPosition:pointerPositionInFile}
+}
+
+/**
+ * Relocates a string to a new position in the file and updates its pointer.
+ * 
+ * Process:
+ * 1. Validates new position is within file bounds
+ * 2. Calculates position difference and final string location
+ * 3. Checks if destination has enough null space for the string
+ * 4. If space available:
+ *    - Clears original string position (with nulls)
+ *    - Updates pointer value with new position
+ *    - Moves string to new location by reconstructing file buffer
+ *    - Saves file and refreshes views
+ * 5. Shows error if destination space insufficient
+ * 
+ * @param {number} newStringPositionInFile - Desired file offset for the string
+ * @param {string} listWitgetPointerText - Current pointer value as hex string
+ * @returns {void}
+ */
+function relocateStringPosition(newStringPositionInFile,listWitgetPointerText){
+  let currentStringPosition
+
+  const currentStringData = currentStringSelectedData()
+  if(!currentStringData) return
+
+  if(bigEndian.isChecked()){
+    currentStringPosition = Buffer.from(listWitgetPointerText,"hex").readUint32BE(0)
+  }else{
+    currentStringPosition = Buffer.from(listWitgetPointerText,"hex").readUint32LE(0)
+  }
+
+  if(newStringPositionInFile>currentContent.length){
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("The selected position for the new string is out the boundries of the file")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }
+
+  //PositionDifference can be positive or negative
+  const positionDifference = newStringPositionInFile-currentStringData.stringPosition
+
+  const finalStringPosition = currentStringData.stringPosition+ positionDifference
+  
+  let freeSpaceInDestination
+  for(let i=0;currentContent[finalStringPosition+i]===0;i++){
+    freeSpaceInDestination = i
+  }
+
+  if(freeSpaceInDestination>currentStringData.text.length){
+
+    //Put 0's in the current String place
+    if(pointersViewerSpecific.count()===1){
+      for(let i =0;currentContent[currentStringData.stringPosition+i]!==0;++i){
+        currentContent[currentStringData.stringPosition+i]=0
+      }
+    }
+
+    const pointersLength = pointersViewerFull.currentItem().text().length
+    const padInfo = getPaddingInfo(pointersLength);
+    let newPointerValue
+    if(bigEndian.isChecked()){
+      newPointerValue = applyPadding((currentStringPosition+positionDifference).toString(16).toUpperCase(),pointersLength, padInfo);
+    }else{
+      newPointerValue = padAndReverseHex((currentStringPosition+positionDifference).toString(16).toUpperCase(),pointersLength)
+    }
+
+    const newPointerBuffer = Buffer.from(newPointerValue,"hex")
+    newPointerBuffer.copy(currentContent, currentStringData.pointerPosition)
+
+    const head = currentContent.subarray(0,finalStringPosition)
+    const body = currentContent.subarray(finalStringPosition+currentStringData.text.length,currentContent.length)
+
+    currentContent = Buffer.concat([head,currentStringData.text,body])
+
+    saveCurrentContent()
+
+    const mibsModeIsOn = mibListObjsData>0
+    saveAndPrepare(mibsModeIsOn)
+
+    if(hexViewBuffer){
+      shutdownHexView()
+    }
+
+  }else{
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("Not enough space (null/00 values) found in the selected position")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }
+}
+
+/**
+ * Main entry point for string relocation operations. Handles multiple scenarios:
+ * 
+ * 1. Validation: Checks if a string is selected and not is the first one (first one can't be relocated)
+ * 2. Hex View: Opens hex viewer if pointer editor field is empty (visual aid to choose where will be the new string)
+ * 3. Direct Relocation: If pointer editor field has already a pointer, the value is used as the new pointer
+ * 4. Space Extension: Creates new string at the end of section by:
+ *    - Finding null space after the last string
+ *    - Converting a null byte to space (0x20) to create a new string
+ *    - Editing the selected pointer to point to this new string
+ *    - Adjusting all subsequent pointers accordingly
+ * 
+ * Also handles pointer validation, space checking, and UI updates.
+ * 
+ * @returns {void}
+ */
+function relocateToNewString(){
+
+  if(listWidget.currentRow()===-1){
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("No string selected")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }else if(listWidget.currentRow()===0){
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("First string can't be relocated")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }
+
+  if(highlightPointers(true)===false) return
+  
+  if(pointersEditor.text()===""){
+
+    const encoding = UTF8Encoding?"UTF8":"SJIS"
+    const row = pointersViewerSpecific.currentRow()===-1?0:pointersViewerSpecific.currentRow()
+    
+    const listWitgetObj = {
+      text: pointersViewerFull.currentItem().text(),
+      row:row
+    }
+
+    hexView(selectedFile,encoding,listWitgetObj)
+
+    return
+  }
+  
+  if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i)===null){
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("The new pointer values are not valid")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }
+  
+  const textToInsertData = currentStringSelectedData()
+
+  //Check if there are NOT enough 00's at the end of the string section that is being edited
+  if(spaceLeftInSection<textToInsertData.text.length
+  &&pointersViewerSpecific.currentItem().text()===pointersEditor.text()){
+
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("Not enough space (null/00 values) in the strings interval")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+
+  //Creates a new string and make the selected pointer point to it
+  }else if (pointersViewerSpecific.currentItem().text()===pointersEditor.text()){
+    let i =0;
+    let newStringAddressDecimal =""
+    while(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i] !="00"){
+
+      if(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+1] ===0 && currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2] ===0){
+
+        newStringAddressDecimal = (parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2).toString(16).toUpperCase()
+        break
+      }
+      i=i+1;
+    }
+
+    currentContent[parseInt(newStringAddressDecimal,16)] = 32
+
+    let firstPointerW = pointersViewerFull.item(0).text()
+
+    let firstPointerValuesInDecimals =""
+    if(bigEndian.isChecked()===true){
+      firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntBE(0,Buffer.from(firstPointerW, "hex").length)
+    }else{
+      firstPointerValuesInDecimals = Buffer.from(firstPointerW, "hex").readUIntLE(0,Buffer.from(firstPointerW, "hex").length)
+    }
+
+    i = 1;
+    let k = 0;
+
+    while(pointersHexValues[k] != undefined){
+      oldPointersHexValues[k] =  pointersHexValues[k]
+      k=k+1;
+    }
+
+    let differenceInDecimals = parseInt(newStringAddressDecimal,16)-parseInt(addressOfEachString[0],16)
+    let nextPointerInDecimals = firstPointerValuesInDecimals+differenceInDecimals;
+    let newPointerHexValues
+
+    if(bigEndian.isChecked()===true){
+      newPointerHexValues = nextPointerInDecimals.toString(16)
+    }else{
+      newPointerHexValues = nextPointerInDecimals.toString(16).padStart(firstPointerW.length, '0').match(/.{1,2}/g).reverse().join('') 
+    }
+
+    k=0
+    //Add 00 to the right or left side of pointer.
+    if(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length
+    &&extractedPointersIn4[i]!= undefined){
+
+      while(k<Math.trunc(newStringAddressDecimal.toString(16).length/2)){
+        let left = false
+        let right = false
+    
+        if(extractedPointersIn4[0].toString("hex")[k] ==="0"){
+          left = true
+        }
+          
+        if(extractedPointersIn4[0].toString("hex")[extractedPointersIn4[0].toString("hex").length-k-1] ==="0"){
+          right = true
+        }
+    
+        if(left === true && right === false){
+            
+          while(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length){
+            newPointerHexValues =  "0" + newPointerHexValues
+          }
+    
+        }else if(left === false && right === true){
+            
+          while(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length){
+            newPointerHexValues = newPointerHexValues+ "0"
+          }
+        }
+        k=k+1
+      }
+    }
+    i=i+1
+
+    pointersEditor.setText(newPointerHexValues.toUpperCase())
+    saveEditedPointer()
+
+    const mibsModeIsOn = mibListObjsData>0
+    saveAndPrepare(mibsModeIsOn)
+
+    listWidget.scrollToBottom()
+
+    if(hexViewBuffer){
+      shutdownHexView()
+    }
+  
+  //Move the string to a new position and edit it pointer to point that position
+  }else if(pointersViewerSpecific.currentItem().text()!==pointersEditor.text()){
+    
+    let newStringPositionInFile
+    const currentStringData = currentStringSelectedData()
+    if(bigEndian.isChecked()){
+      newStringPositionInFile = currentStringData.stringPosition+(Buffer.from(pointersEditor.text(),"hex").readUint32BE(0)-Buffer.from(pointersViewerSpecific.currentItem().text(),"hex").readUint32BE(0))
+    }else{
+      newStringPositionInFile = currentStringData.stringPosition+(Buffer.from(pointersEditor.text(),"hex").readUint32LE(0)-Buffer.from(pointersViewerSpecific.currentItem().text(),"hex").readUint32LE(0))
+    }
+    
+    relocateStringPosition(newStringPositionInFile,pointersViewerSpecific.currentItem().text())
+  }
+}
+
+//When a item in the pointers viewer is edited, needs to change its highlight to make it
+//match with its new values (same goes for specific pointers viewer), this
+//function does that and also saves the pointer changed in currentContent to the file.
+function saveEditedPointer(){
+
+  if(pointersEditor.text().match(/^(?:[0-9A-F]{8})$/i) ===null){
+    errorMessageBox.setWindowTitle("Error")
+    errorMessageBox.setText("The new pointer values are not valid")
+    errorMessageButton.setText("                                                Ok                                              ")
+    errorMessageBox.exec()
+    return
+  }
+  extractedPointersIn4[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]] =  Buffer.from(pointersEditor.text(),"hex")
+  pointersViewerSpecific.currentItem().setText(pointersEditor.text())
+  pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]).setText(pointersEditor.text())
+  pointersViewerSpecific.currentItem().setText(pointersEditor.text())
+
+  extractedPointers = Buffer.concat(extractedPointersIn4)
+
+  let tempCurrentContent = currentContent.toString("binary")
+  let tempExtractedPointers = extractedPointers.toString("binary")
+
+  tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
+  currentContent = Buffer.from(tempCurrentContent, "binary")
+  pointersViewerFull.removeItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]))
+
+  if(pointersViewerSpecific.currentRow()===0){
+    let pointerViewerListQWidget = new QWidget()
+    let pointerViewerListQWidgetLayout = new FlexLayout
+    pointerViewerListQWidget.setLayout(pointerViewerListQWidgetLayout)
+    let pointerViewerListQWidgetText = new QLabel
+    pointerViewerListQWidgetText.setText(pointersEditor.text())
+    pointerViewerListQWidgetText.setInlineStyle(`
+    color:red;
+    margin: 0 1 0 0;
+    `)
+    pointerViewerListQWidgetLayout.addWidget(pointerViewerListQWidgetText)
+    pointersViewerFull.setItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]),pointerViewerListQWidget)
+  }else{
+    let pointerViewerListQWidget2 = new QWidget()
+    let pointerViewerListQWidgetLayout2 = new FlexLayout
+    pointerViewerListQWidget2.setLayout(pointerViewerListQWidgetLayout2)
+    let pointerViewerListQWidgetText2 = new QLabel
+    pointerViewerListQWidgetText2.setText(pointersEditor.text())
+    pointerViewerListQWidgetText2.setInlineStyle(`
+    color:midnightblue;
+    margin: 0 1 0 0;
+    `)
+    pointerViewerListQWidgetLayout2.addWidget(pointerViewerListQWidgetText2)
+    pointersViewerFull.setItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]),pointerViewerListQWidget2)
+    quantityOfSharedPointers=quantityOfSharedPointers+1;
+  }
+  saveCurrentContent()
 }
 
 //Creates several windows one after another to gather info to create a .pt file to manage a pointers table.
@@ -3374,16 +3081,14 @@ function getPointersTableData(){
     && postLastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && fs.existsSync(`${selectedFile}`) === true
     ){
-      
-    console.log("The hex format is correct!")
+      console.log("The hex format is correct!")
     }
     else{
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("Not correct hex format, invalid file path, name or offset, aborting...")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
-    return
-
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("Not correct hex format, invalid file path, name or offset, aborting...")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      return
     }
     
     createPointersDialog.close(true)
@@ -3572,9 +3277,7 @@ function getPointersTableData(){
       sectionNameLineEdit.setText(pointersTableSectionNameLineEdit.text())
 
       createPointersTable(pointersTableSectionNameLineEdit.text())
-
     })
-
   })
 
   createPointersDialogLayout.addWidget(createPointersTableButton)
@@ -3660,39 +3363,37 @@ function getPointersTableData(){
   }
 
   createPointersDialog.show()
-
 }
 
-//Usses the info gather by the getPointersTableData() to creates a .pt file
+//Uses the info gathered by the getPointersTableData() to creates a .pt file
 //This file is saved by default in rootFolder/Pointers Tables
 async function createPointersTable(name){
+  tableStartPointerFileAddresses[0] = (parseInt(firstPointerAddressLineEdit.text(),16)).toString(16)
+  tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
+  // tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
 
-tableStartPointerFileAddresses[0] = (parseInt(firstPointerAddressLineEdit.text(),16)).toString(16)
-tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
-// tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
+  getSectionedCurrentContent()
+  if(getOrganizedSections()===1){
 
-getSectionedCurrentContent()
-if(getOrganizedSections()===1){
+    if(csvTranslationMode===true){
+      csvTranslationCanceled = true
+    }
 
-  if(csvTranslationMode===true){
-    csvTranslationCanceled = true
+    removePointersTable()
+    return
+  }
+  getGlobalExtractedStrings()
+  i=0
+
+  if(fs.existsSync("./Pointers Tables/")===false){
+    fs.mkdirSync("./Pointers Tables/")
   }
 
-  removePointersTable()
-  return
-}
-getGlobalExtractedStrings()
-i=0
+  saveTableConfiguration(name)
 
-if(fs.existsSync("./Pointers Tables/")===false){
-fs.mkdirSync("./Pointers Tables/")
-}
+  await sleep(200);
 
-saveTableConfiguration(name)
-
-await sleep(200);
-
-loadPointersTable(`./Pointers Tables/${name + ".pt"}`)
+  loadPointersTable(`./Pointers Tables/${name + ".pt"}`)
 }
 
 //Displays a window to select a .pt file
@@ -3709,15 +3410,15 @@ function loadPointersTable(pathToPTFile){
     const ptFileDialog = new QFileDialog()
     let goBack = true
 
-    ptFileDialog.addEventListener("fileSelected",function(){
+    ptFileDialog.addEventListener("fileSelected",function(file){
 
       if(ptFileDialog.selectedFiles().length!=0&&
         fs.lstatSync(ptFileDialog.selectedFiles()[0]).isDirectory()===false&&
         path.extname(`${ptFileDialog.selectedFiles()[0].toLowerCase()}`)===".pt"){
 
         
-        selectedPTFile = ptFileDialog.selectedFiles();
-        sectionNameLineEdit.setText(selectedPTFile[0].replace(/^.*[\\\/]/, "").replace(".pt",""))
+        selectedPTFile = file;
+        sectionNameLineEdit.setText(selectedPTFile.replace(/^.*[\\\/]/, "").replace(".pt",""))
         goBack = false
       }else{
         return
@@ -3770,7 +3471,7 @@ function loadPointersTable(pathToPTFile){
 
   sectionNameHeader = sectionNameLineEdit.text()
 
-  pointersTableMode = true
+  pointersTableModeON = true
 
   if(firstPointersTableAddressLineEdit.text().length=== 0){
     win.setFixedSize(728, 544);
@@ -3874,19 +3575,18 @@ function loadPTConfiguration(){
       i = i+1;
     }
 
-    saveAndPrepare(pointersTableMode)
+    saveAndPrepare(pointersTableModeON)
 
   }
 }
 
 //Uses the selected table pointers from the .pt file to get the parts or sections that made the
-//analized file. This goes from the first pointer until the first pointer of the next section.
+//analized file. This goes from the first pointer until the first pointer of the next section
 function getSectionedCurrentContent(){
   let i =0
   sectionedCurrentContent = []
   
   while(selectedTablePointers.length>i){
-
 
     if(selectedTablePointers.length-1!=i){
       let firstPointerAddress1 
@@ -3905,80 +3605,77 @@ function getSectionedCurrentContent(){
         sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
   
       }
-
     }else{
       sectionedCurrentContent[i] = currentContent.slice(Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length),-1)
 
       break
     }
-  
     i=i+1
   }
-
 }
 
 //Uses the data from getSectionedCurrentContent() to get their pointers and strings addresses
-function getOrganizedSections(){
-  let i=0
+function getOrganizedSections() {
+  const isBigEndian = bigEndian.isChecked();
+  const isFileSizeMenuAction1 = fileSizeMenuAction1.isChecked();
+  const isFileSizeMenuAction2 = fileSizeMenuAction2.isChecked();
+  const selectedPointers = selectedTablePointers;
+  let i = 0;
 
-  while(selectedTablePointers[i]!=undefined){
-
-    if(bigEndian.isChecked()===true){
-      tableStartPointerFileAddresses[i] = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i], "hex").length).toString(16)
+  while (selectedPointers[i] !== undefined) {
+    try {
+      // Pre-calculate frequently used values
+      const currentPointerHex = selectedPointers[i];
+      const currentPointerBuffer = Buffer.from(currentPointerHex, "hex");
+      const readMethod = isBigEndian ? 'readUIntBE' : 'readUIntLE';
       
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset)).readUIntBE(0,4)
-      tableEndPointerStartStringFileAddresses[i]= (offset+ parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
-  
-      if(selectedTablePointers[i+1]!=undefined){
-        tableEndStringFileAddresses[i]= Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,Buffer.from(selectedTablePointers[i+1], "hex").length).toString(16)
-  
-      }else{
-        tableEndStringFileAddresses[i]= postLastStringAddress
-      }
-    }else{
+      // Process pointer addresses
+      tableStartPointerFileAddresses[i] = currentPointerBuffer[readMethod](0, currentPointerBuffer.length).toString(16);
       
-      tableStartPointerFileAddresses[i] = (Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i], "hex").length)).toString(16)
-      
-      offset = Buffer.from(sectionedCurrentContent[i].slice(0+globalOffset,4+globalOffset),"hex").readUIntLE(0,4)
-      tableEndPointerStartStringFileAddresses[i]= ( offset+parseInt(tableStartPointerFileAddresses[i],16)).toString(16)
-  
-      if(selectedTablePointers[i+1]!=undefined){
-        tableEndStringFileAddresses[i]= (Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,Buffer.from(selectedTablePointers[i+1], "hex").length)).toString(16)
-  
-      }else{
+      // Process offset
+      const offsetBuffer = Buffer.from(sectionedCurrentContent[i].slice(0 + globalOffset, 4 + globalOffset));
+      const offset = offsetBuffer[readMethod](0, 4);
+      tableEndPointerStartStringFileAddresses[i] = (offset + parseInt(tableStartPointerFileAddresses[i], 16)).toString(16);
 
-        if(fileSizeMenuAction1.isChecked()===true||savedString===""){
-
-          tableEndStringFileAddresses[i]= postLastStringAddress
-
-        }else if(fileSizeMenuAction2.isChecked()===true){
-
-          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress,16) + (currentContent.length-oldcurrentContentLength)).toString(16)
-          postLastStringAddress = tableEndStringFileAddresses[i] 
+      // Process end string addresses
+      if (selectedPointers[i + 1] !== undefined) {
+        const nextPointerBuffer = Buffer.from(selectedPointers[i + 1], "hex");
+        tableEndStringFileAddresses[i] = nextPointerBuffer[readMethod](0, nextPointerBuffer.length).toString(16);
+      } else {
+        if (isFileSizeMenuAction1 || savedString === "") {
+          tableEndStringFileAddresses[i] = postLastStringAddress;
+        } else if (isFileSizeMenuAction2) {
+          const sizeDiff = currentContent.length - oldcurrentContentLength;
+          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress, 16) + sizeDiff).toString(16);
+          postLastStringAddress = tableEndStringFileAddresses[i];
         }
       }
+
+      // Validate address
+      if (currentContent[parseInt(tableEndPointerStartStringFileAddresses[i], 16)] === undefined) {
+        errorMessageBox.setWindowTitle("Error");
+        errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`);
+        errorMessageButton.setText("                                                Ok                                              ");
+        errorMessageBox.exec();
+        return 1;
+      }
+
+      // Build organized section
+      organizedSections[i] = `${i + 1}\n` +
+      tableStartPointerFileAddresses[i].toUpperCase() + "\n" +
+      tableEndPointerStartStringFileAddresses[i].toUpperCase() + "\n" +
+      tableEndStringFileAddresses[i].toUpperCase() + "\n";
+
+      i++;
+    } catch (error) {
+      console.error("Error processing pointer at index", i, ":", error);
+      return 1;
     }
-
-    organizedSections[i] =`${i+1}\n`+
-    tableStartPointerFileAddresses[i].toUpperCase()+"\n"+
-    tableEndPointerStartStringFileAddresses[i].toUpperCase()  +"\n"+
-    tableEndStringFileAddresses[i].toUpperCase()  +"\n"
-
-    if(currentContent[parseInt(tableEndPointerStartStringFileAddresses[i],16)]===undefined){
-      errorMessageBox.setWindowTitle("Error")
-      errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`)
-      errorMessageButton.setText("                                                Ok                                              ")
-      errorMessageBox.exec()
-      return 1
-    }
-
-    i=i+1;
   }
 }
 
-//Self-explanatory.
 //globalExtractedStrings and globalAddressOfEachString are needed to calculate
-//accurately the space left when table pointers mode is ON.
+//accurately the space left when table pointers mode is ON
 function getGlobalExtractedStrings(){
   
   let i =0
@@ -3997,18 +3694,18 @@ function getGlobalExtractedStrings(){
 function saveTableConfiguration(name){
 
   if(organizedSections.length===0||organizedSections===undefined){
-return
+    return
   }
   
   if(name===undefined){
     name = sectionNameLineEdit.text()
   }
 
-let i = 0
- while(selectedTablePointers[i]!= undefined){
-  selectedTablePointers[i] = selectedTablePointers[i].toUpperCase()
-  i=i+1
- }
+  let i = 0
+  while(selectedTablePointers[i]!= undefined){
+    selectedTablePointers[i] = selectedTablePointers[i].toUpperCase()
+    i=i+1
+  }
 
 fs.writeFileSync(`./Pointers Tables/${name + ".pt"}`,
 `TableName=
@@ -4080,7 +3777,7 @@ function removePointersTable(){
   globalExtractedStrings = []
 
   sectionNameHeader = "Section name"
-  pointersTableMode = false
+  pointersTableModeON = false
   
   rezisePointersTableLineEdit()
   win.setFixedSize(728, 504);
@@ -4197,68 +3894,55 @@ function pointersTableUpdater(){
   getGlobalExtractedStrings()
   stringsOldOffset = stringsOffset
 
-  if(specialMode===false||csvTranslationMode===true){
+  if(csvInfoGatheringMode===false||csvTranslationMode===true){
     saveTableConfiguration()
   }
 }
 
 //Manages when the Shift-JIS encoding is selected.
-function setShiftJISEncoding(){
-  if(encodingMenuAction2.isChecked()===true){
+function setShiftJISEncoding(force){
+  if(encodingMenuAction2.isChecked()===true||force){
     encodingMenuAction1.setChecked(false)
     encodingMenuAction1.setEnabled(true)
     encodingMenuAction2.setEnabled(false)
     encodingMenu.setTitle("Encoding: Shift-JIS")
     UTF8Encoding = false
     shiftJISEncoding = true
+
+    if(hexViewBuffer&&currentEncoding==="UTF8"){
+      setShiftJISEncodingAndRender()
+    }
   }
 
   if(listWidget.count()!=0 && extractedPointersIn4[0]!= undefined){
     console.log("Changing encoding to Shift-JIS 1")
-    saveAndPrepare()
+    saveAndPrepare(true)
   }else if(listWidget.count()!=0 && extractedPointersIn4[0]=== undefined){
     console.log("Changing encoding to Shift-JIS 2")
-    saveAndPrepare2()
+    saveAndPreparePointerless(true)
   }
 }
 
 //Manages when the UTF8 encoding is selected.
-function setUTF8Encoding(){
-  if(encodingMenuAction1.isChecked()===true){
+function setUTF8Encoding(force){
+  if(encodingMenuAction1.isChecked()===true||force){
     encodingMenuAction2.setChecked(false)
     encodingMenuAction2.setEnabled(true)
     encodingMenuAction1.setEnabled(false)
     encodingMenu.setTitle("Encoding: UTF-8")
     UTF8Encoding = true
     shiftJISEncoding = false
+    if(hexViewBuffer&&currentEncoding==="SJIS"){
+      setUTF8EncodingAndRender()
+    }
   }
   if(listWidget.count()!=0 && extractedPointersIn4[0]!= undefined){
     console.log("Changing encoding to UTF-8 1")
-    saveAndPrepare()
+    mibListObjsData.length>0?saveAndPrepare(false):saveAndPrepare(true)
   }else if(listWidget.count()!=0 && extractedPointersIn4[0]=== undefined){
     console.log("Changing encoding to UTF-8 2")
-    saveAndPrepare2()
+    mibListObjsData.length>0?saveAndPreparePointerless(false):saveAndPreparePointerless(true)
   }
-}
-
-function setEUCJPEncoding(){
-
-}
-
-function setJISncoding(){
-
-}
-
-function setUTF16Encoding(){
-
-}
-
-function setUTF16BEEncoding(){
-
-}
-
-function setUTF16LEEncoding(){
-
 }
 
 //Manages the file size when a bigger string is overwritten.
@@ -4440,9 +4124,9 @@ function sectionNameButtonIsBeingPressed(options) {
     clearInterval(timer);
     timer = setInterval(function() {
       if(sectionNameUpButton.isDown()===true){
-        plus1(pointersTableMode)
+        plus1(pointersTableModeON)
       }else{
-        plus1(pointersTableMode)
+        plus1(pointersTableModeON)
         clearInterval(this)
       }
     }, 100)
@@ -4450,13 +4134,605 @@ function sectionNameButtonIsBeingPressed(options) {
     clearInterval(timer);
     timer = setInterval(function() {
       if(sectionNameDownButton.isDown()===true){
-        minus1(pointersTableMode)
+        minus1(pointersTableModeON)
       }else{
-        minus1(pointersTableMode)
+        minus1(pointersTableModeON)
         clearInterval(this)
       }
     }, 100)
   }
+}
+
+/**
+ * Loads a .mib file configuration data needed to get their strings.
+ * 
+ * Handles three scenarios:
+ * 1. Configuration with pointers: Loads file, addresses, then runs start() and saveAndPrepare()
+ * 2. Configuration without pointers: Same but uses saveAndPreparePointerless()
+ * 3. Invalid position: Decrements section counter and stops info gathering if active
+ * 
+ * @param {number} arrPosition - Position in mibListObjsData array (1-based index)
+ * @returns {void}
+ */
+function loadMibConfiguration(arrPosition){
+
+  if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].address.firstPointer){
+
+    filePathQLineEditRead.setText(`${mibListObjsData[arrPosition-1].path}`)
+    sectionNameLineEdit.setText(mibListObjsData[arrPosition-1].name)
+    selectedFile = filePathQLineEditRead.text()
+
+    firstStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstString)
+    lastStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastString)
+    firstPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstPointer)
+    lastPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastPointer)
+
+    start()
+    saveAndPrepare(false)
+  }else if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].address.firstString){
+
+    filePathQLineEditRead.setText(`${mibListObjsData[arrPosition-1].path}`)
+    sectionNameLineEdit.setText(mibListObjsData[arrPosition-1].name)
+    selectedFile = filePathQLineEditRead.text()
+
+    firstStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstString)
+    lastStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastString)
+    firstPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstPointer)
+    lastPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastPointer)
+
+    start()
+    saveAndPreparePointerless(false)
+  }else{
+    if(csvInfoGatheringMode===true){
+      stopCsvInfoGatheringMode = true
+    }
+    sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
+  }
+}
+
+function containsOnlyNull(buffer) {
+  return buffer.every(byte => byte === 0);
+}
+
+//Returns a Buffer if is not a string Pointer, contrary case, returns true
+function checkIfIsStringPointer(positionToLook,buffer,firstStringPosition,initialPosition,offset = 0){
+  const mainBufferLength = buffer.length
+
+  if(!firstStringPosition){
+    firstStringPosition =0  
+  }
+  const positionToLookSlice = buffer.subarray(positionToLook, positionToLook + 4);
+  const posibleStringPosition = positionToLookSlice.readUInt32LE(0) +offset
+  const currentSlice = buffer.subarray(posibleStringPosition, posibleStringPosition + 4);
+
+  if(!containsOnlyNull(currentSlice)
+  &&posibleStringPosition>initialPosition
+  &&posibleStringPosition>firstStringPosition
+  &&currentSlice.readUInt32LE(0)>mainBufferLength
+  &&currentSlice.readUInt32BE(0)>mainBufferLength){
+    return true
+  }else{
+    return posibleStringPosition
+  }
+}
+
+//Checks if a number is divisible by another
+function isMultiple(number, divider) {
+
+  if (number % divider === 0) {
+    return true; // is multiple
+  } else {
+    return false; // is not multiple
+  }
+}
+
+/**
+ * Scans a buffer starting from a given position to find all pointer addresses
+ * and their corresponding string addresses.
+ * 
+ * The function works in two phases:
+ * 1. Locates the first valid string pointer by scanning forward
+ * 2. Then finds all subsequent pointers in the table
+ * 
+ * Also calculates the post-last string address, ensuring 4-byte alignment.
+ * 
+ * @param {Buffer} buffer - The file buffer to scan
+ * @param {number} positionToStartSearch - Starting offset in the buffer
+ * @param {number} offset - Optional offset to add to pointer values (default: 0)
+ * @param {number} phase - Adjusts pointer positioning (0 or 1 typically)
+ * @returns {Array} [allStringsAddress, allPointersAddress] - Arrays of hex addresses
+ */
+function getAddressesForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
+
+  const pointers = [];
+
+  let foundStringPointersSet
+  let currentPositionInTest = positionToStartSearch+ offset
+  const initialPosition = currentPositionInTest
+  let isStartPhase = true
+  while(!foundStringPointersSet){
+
+    const pointerOrString = checkIfIsStringPointer(currentPositionInTest,buffer,undefined,initialPosition,offset)
+    if(pointerOrString!==true){
+
+      if(isStartPhase){
+        currentPositionInTest = pointerOrString + phase*4
+        isStartPhase=false
+      }else{
+        currentPositionInTest = pointerOrString
+      }
+      
+    }else{
+      let k = 0
+      while (true) {
+        const start = currentPositionInTest + (k * 4); //Pointer size is 4
+
+        let firstPointerStringPosition
+        if(pointers[0]){
+          firstPointerStringPosition = buffer.subarray(pointers[0], pointers[0] + 4).readUInt32LE(0)
+        }
+        if (checkIfIsStringPointer(start,buffer,firstPointerStringPosition,initialPosition,offset)!==true){
+          //PostLastPointer
+            pointers.push(start)
+          break
+        }
+        
+        pointers.push(start);
+        k++;
+      }
+      foundStringPointersSet = true
+    }
+  }
+
+  const allPointersAddress = new Array(pointers.length);
+  const allStringsAddress = new Array(pointers.length);
+  
+  for (let i = 0; i < pointers.length; i++) {
+    allPointersAddress[i] = pointers[i].toString(16).toUpperCase();
+
+    if(i<pointers.length-1){
+      allStringsAddress[i] = (buffer.subarray(pointers[i], pointers[i] + 4).readUInt32LE(0)+offset).toString(16).toUpperCase()
+    }
+  }
+
+  let nextNonZeroByte = parseInt(allStringsAddress[allStringsAddress.length-2],16)
+  while (nextNonZeroByte < buffer.length && buffer[nextNonZeroByte] !== 0) {
+    nextNonZeroByte++;
+  }
+
+  while (nextNonZeroByte <= buffer.length && buffer[nextNonZeroByte] === 0) {
+    nextNonZeroByte++;
+  }
+  let postLastString
+  if(buffer.length===nextNonZeroByte){
+    postLastString = (nextNonZeroByte-1).toString(16).toUpperCase().padStart(pointers[0].length, '0').toUpperCase();
+  }else{
+
+    if(isMultiple(nextNonZeroByte,4)){
+      postLastString = nextNonZeroByte.toString(16).toUpperCase().padStart(pointers[0].length, '0').toUpperCase();
+    }else{
+      while(!isMultiple(nextNonZeroByte,4)){
+        nextNonZeroByte--;
+      }
+      postLastString = nextNonZeroByte.toString(16).toUpperCase().padStart(pointers[0].length, '0').toUpperCase();
+    }
+  }
+  
+  allStringsAddress[allStringsAddress.length-1] = postLastString
+  
+  return [allStringsAddress, allPointersAddress];
+}
+
+function tryToOptimizeTheSpaceForMibs(allStringsAddress, allpointersAddress, buffer) {
+
+  //Update all pointers data and strings position but the last one
+  for(let i = 0;allStringsAddress[i+1];i++){
+    const stringPos = parseInt(allStringsAddress[i], 16);
+    const pointerPos = parseInt(allpointersAddress[i], 16);
+
+    //String limits
+    let start = stringPos;
+    while (start > 0 && buffer[start - 1] === 0) start--;
+    
+    let end = stringPos;
+    while (end < buffer.length && buffer[end] !== 0) end++;
+
+    //Move string
+    const targetPos = start + 1;
+    const stringContent = Buffer.from(buffer.subarray(stringPos, end));
+    buffer.fill(0, stringPos, end);
+    stringContent.copy(buffer, targetPos);
+
+    //Update pointer
+    const pointerBuffer = Buffer.alloc(4);
+    pointerBuffer.writeUInt32LE(targetPos);
+    pointerBuffer.copy(buffer, pointerPos);
+
+    allStringsAddress[i] = targetPos.toString(16).padStart(allStringsAddress[i].length, '0').toUpperCase();
+  }
+  return [allStringsAddress,buffer];
+}
+
+//Returns false if the file header matches known Monster Hunter unencrypted signatures,
+//true otherwise (indicating probable encryption). Checks multiple offsets and patterns.
+function checkEncryption(filePath) {
+  const buffer = fs.readFileSync(filePath);
+
+  if (buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('48000000', 'hex')) //MHG
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('40000000', 'hex')) //MH1
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('74000000', 'hex')) //MH2
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('3C000000', 'hex')) //MHP1
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('4D485032', 'hex')) //MHP2
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('4C000000', 'hex')) //MHP2ndG
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('94000000', 'hex')) //MHP3RD
+  ||buffer.length >= 4 && buffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex'))
+  ||buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from('4F4D4F4D', 'hex'))){ //MHP3RD
+  
+    return false;
+  }else{
+    return true
+  }
+}
+
+/**
+ * Opens a folder dialog, processes all .mib/.bin files found, and loads them into memory.
+ * 
+ * WORKFLOW:
+ * 1. User selects folder containing .mib/.bin files
+ * 2. Files are filtered to exclude encrypted ones (using checkEncryption)
+ * 3. UI switches to .mib mode (read-only fields, disabled buttons, adds "Leave Mib mode" menu)
+ * 4. Each file is processed based on its game type (MH1, MHP1, MHP2, MHP3, MHTri, etc.)
+ * 5. For each file, extracts pointer tables and string addresses using game-specific offsets
+ * 6. Some files may generate multiple configurations (e.g., MH1 generates two)
+ * 7. After processing, loads the first configuration and displays it
+ * 
+ * GAME-SPECIFIC HANDLING:
+ * - MH1/MH2/MHG: Two pointer tables (positions 96 and 48), may need space optimization
+ * - MHP1/MHP2/MHP3: Multiple tables (up to 7), different start positions per game
+ * - MHTri: Uses OMOM header, reads pointer count from offset 4
+ * 
+ * Also handles encoding (Shift-JIS vs UTF-8) based on game/region.
+ * 
+ * @returns {Promise<void>}
+ */
+async function openAndProcessAllMibs(){
+
+  let mibList
+
+  const chooseFolderDialog = new QFileDialog();
+  chooseFolderDialog.setFileMode(2)
+  chooseFolderDialog.setOption(1,true)
+  chooseFolderDialog.setWindowTitle("Select the folder where the .mib files are located")
+  chooseFolderDialog.addEventListener("fileSelected",async function(selection){
+
+    mibList = (await fs.promises.readdir(selection)).filter(file => file.endsWith('.mib.unpacked')||file.endsWith('.mib')||file.endsWith('.bin'));
+
+    mibList = mibList.filter((fileName,index)=>{
+
+      const isEncrypted = checkEncryption(selection+"/"+fileName)
+
+      if(!isEncrypted){return fileName}
+    })
+
+    setDefaultValues()
+    
+    mibListObjsData.length=0
+
+    sectionNameLineEdit.setReadOnly(true)
+    lastPointerAddressLineEdit.setReadOnly(true)
+    firstPointerAddressLineEdit.setReadOnly(true)
+    firstStringAddressLineEdit.setReadOnly(true)
+    lastStringAddressLineEdit.setReadOnly(true)
+
+    saveSettingsButton.setDisabled(true)
+    saveSettingsButton2.setDisabled(true)
+    bigEndian.setCheckable(false)
+    mainMenuAction1.setEnabled(false)
+    mainMenuAction2.setEnabled(false)
+    mainMenuAction4.setEnabled(false)
+
+    const mainMenuLeaveMibAction = new QAction();
+    mainMenuLeaveMibAction.setText('Leave Mib mode');
+
+    const listenerHandler = function () {shutdownMibMode()}
+
+    mainMenuLeaveMibAction.addEventListener("triggered",listenerHandler)
+    menuBar.addAction(mainMenuLeaveMibAction)
+    
+    function shutdownMibMode(){
+      menuBar.removeAction(mainMenuLeaveMibAction)
+      mainMenuLeaveMibAction.removeEventListener("triggered",listenerHandler)
+      mainMenuLeaveMibAction.delete()
+      mibListObjsData.length=0
+
+      sectionNameLineEdit.setReadOnly(false)
+      lastPointerAddressLineEdit.setReadOnly(false)
+      firstPointerAddressLineEdit.setReadOnly(false)
+      firstStringAddressLineEdit.setReadOnly(false)
+      lastStringAddressLineEdit.setReadOnly(false)
+
+      saveSettingsButton.setDisabled(false)
+      saveSettingsButton2.setDisabled(false)
+      bigEndian.setCheckable(true)
+      mainMenuAction1.setEnabled(true)
+      mainMenuAction2.setEnabled(true)
+      mainMenuAction4.setEnabled(true)
+
+      setDefaultValues()
+      loadConfiguration()
+      goToFirstSection()
+    }
+
+
+    mibList.forEach((mib,index)=>{
+
+      let mibName = mibList[index].replaceAll(".mib.unpacked","")
+      mibName = mibName.replaceAll(".mib","")
+
+      const mibPath = selection+"/"+mibList[index]
+      const buffer = fs.readFileSync(mibPath);
+      const bufferHeader = buffer.subarray(0, 4)
+
+      if(bufferHeader.equals(Buffer.from('48000000', 'hex'))//MHG
+      ||bufferHeader.equals(Buffer.from('74000000', 'hex'))//MH2
+      ||(bufferHeader.equals(Buffer.from('40000000', 'hex')//MH1 (JP,US,EU)
+      ))){
+    
+        const newMibObj = {
+          address:{
+            firstString:"",
+            lastString:"",
+            firstPointer:"",
+            lastPointer:""
+          },
+          name:mibName+"-1",
+          origin:"MH1J/MH1USA/MH1EUR/MHGPS2/MHGWii",
+          path:mibPath
+        }
+
+        const bufferEurOrDosChecker = buffer.subarray(96, 100)
+        const isEur = bufferEurOrDosChecker.readUIntLE(0,Buffer.from(bufferEurOrDosChecker).length)>65535
+
+        if(isEur){
+          setUTF8Encoding(true)
+        }else{
+          setShiftJISEncoding(true)
+        }
+
+        const isDos = bufferEurOrDosChecker.readUIntLE(0,Buffer.from(bufferEurOrDosChecker).length)===0
+        let allStrings, allPointers = []
+
+        if(!isEur&!isDos){
+          [allStrings,allPointers] = getAddressesForMib(buffer,96)
+        }else if(isEur){
+          [allStrings,allPointers] = getAddressesForMib(buffer,88)
+        }else{
+          [allStrings,allPointers] = getAddressesForMib(buffer,152)
+        }
+        
+        newMibObj.address.lastString = allStrings[allStrings.length-1]
+        newMibObj.address.firstString = allStrings[0]
+        newMibObj.address.lastPointer = allPointers[allPointers.length-1]
+        newMibObj.address.firstPointer = allPointers[0]
+
+        const newMibObj2 = {
+          address:{
+            firstString:"",
+            lastString:"",
+            firstPointer:"",
+            lastPointer:""
+          },
+          name:mibName+"-2",
+          origin:"MH1J/MH1USA/MH1EUR/MHGPS2/MHGWii",
+          path:mibPath
+        }
+
+        const [allStrings2,allPointers2] = getAddressesForMib(buffer,48)
+
+        const [newAllStrings,newBuffer] = tryToOptimizeTheSpaceForMibs(allStrings2,allPointers2,buffer)
+
+        fs.writeFileSync(`${mibPath}`,newBuffer,{
+          encoding: "binary",
+          flag: "w",
+          mode: 0o666
+        },
+        (err) => {
+          if (err){
+            errorMessageBox.setWindowTitle("Error")
+            errorMessageBox.setText("ERROR! maybe the file is being used?")
+            errorMessageButton.setText("                                                Ok                                              ")
+            errorMessageBox.exec()
+          }
+          else {
+            console.log("File written successfully\n");
+          }
+        })
+
+        newMibObj2.address.lastString = newAllStrings[newAllStrings.length-1]
+        newMibObj2.address.firstString = newAllStrings[0]
+        newMibObj2.address.lastPointer = allPointers2[allPointers2.length-1]
+        newMibObj2.address.firstPointer = allPointers2[0]
+
+        mibListObjsData.push(newMibObj)
+        mibListObjsData.push(newMibObj2)
+      }else if(bufferHeader.equals(Buffer.from('3C000000', 'hex'))||//MHP1 (JP-KR-US-EU)
+      bufferHeader.equals(Buffer.from('4D485032', 'hex'))||//MHP2 (JP-USA-EU)
+      bufferHeader.equals(Buffer.from('4C000000', 'hex'))||//MHP2G (JP-USA-EU)
+      bufferHeader.equals(Buffer.from('94000000', 'hex'))||//MHP3RD (JP-USA-EU)
+      bufferHeader.readUInt32BE(0)>16843009&&buffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex'))){//MHP3RD
+        
+        for(let i =0;i<=6;i++){
+          const newMibObj = {
+            address:{
+              firstString:"",
+              lastString:"",
+              firstPointer:"",
+              lastPointer:""
+            },
+            name:mibName+"-1",
+            origin:"MHP1/MHP2/MHP2NDG/MHP3RD and international variants",
+            path:mibPath
+          }
+
+          const mhChecker = buffer.subarray(0, 4)
+
+          const isP1 = mhChecker.equals(Buffer.from('3C000000', 'hex'))
+          const isP3NoOffset = mhChecker.equals(Buffer.from('94000000', 'hex'))
+          const isP3 = (mhChecker.readUInt32BE(0)>16843009&&buffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex')))
+
+          let startPosition1
+          let startPosition2
+          let offset
+          if(isP1){
+            startPosition1 = 84
+            startPosition2 = 36
+          }else if(isP3||isP3NoOffset){
+            startPosition1 = 172
+            if(!isP3NoOffset){
+              offset = 32
+            }
+          }else{//MHP2 and 2ndG
+            startPosition1 = 96
+          }
+
+          const [allStrings,allPointers] = getAddressesForMib(buffer,startPosition1,offset,i)
+          
+          newMibObj.address.lastString = allStrings[allStrings.length-1]
+          newMibObj.address.firstString = allStrings[0]
+          newMibObj.address.lastPointer = allPointers[allPointers.length-1]
+          newMibObj.address.firstPointer = allPointers[0]
+
+          if(startPosition2){
+
+            const newMibObj2 = {
+              address:{
+                firstString:"",
+                lastString:"",
+                firstPointer:"",
+                lastPointer:""
+              },
+              name:mibName+"-2",
+              origin:"MHP1/MHP2/MHP2NDG/MHP3RD and international variants",
+              path:mibPath
+            }
+          
+            const [allStrings2,allPointers2] = getAddressesForMib(buffer,startPosition2,undefined,i)
+      
+            newMibObj2.address.lastString = allStrings2[allStrings2.length-1]
+            newMibObj2.address.firstString = allStrings2[0]
+            newMibObj2.address.lastPointer = allPointers2[allPointers2.length-1]
+            newMibObj2.address.firstPointer = allPointers2[0]
+
+            if(mibListObjsData[0]&&mibListObjsData[0].address.firstString===newMibObj.address.firstString) continue
+
+            if(isP1&&i===0){
+              setShiftJISEncoding(true)
+            }else{
+              setUTF8Encoding(true)
+            }
+
+            mibListObjsData.push(newMibObj)
+            mibListObjsData.push(newMibObj2)
+          }else{
+
+            if(isP1&&i===0){
+              setShiftJISEncoding(true)
+            }else{
+              setUTF8Encoding(true)
+            }
+
+            if(mibListObjsData[0]&&mibListObjsData[0].address.firstString===newMibObj.address.firstString) continue
+            mibListObjsData.push(newMibObj)
+          }
+        }
+      }else if(bufferHeader.equals(Buffer.from('4F4D4F4D', 'hex'))){//MHTri
+        bigEndian.setEnabled(true)
+
+        const numberOfPPointers = buffer.readUint32BE(4)
+
+        for(let i =1;i<=numberOfPPointers;i++){
+          const newMibObj = {
+            address:{
+              firstString:"",
+              lastString:"",
+              firstPointer:"",
+              lastPointer:""
+            },
+            name:mibName+"-1",
+            origin:"MHTri",
+            path:mibPath
+          }
+
+          const firstString = buffer.readUint32BE(8*i)
+          
+          let k =0
+          let m =0
+          while (m<=7){
+            if(buffer[firstString+k]!=0&&buffer[firstString+k+1]===0){
+              m++
+            }
+            k++
+          }
+        
+          newMibObj.address.lastString = toHexadecimal(firstString+k)
+          newMibObj.address.firstString = toHexadecimal(firstString)
+
+          mibListObjsData.push(newMibObj)
+        }
+      }
+    })
+
+    if(mibList.length>0){
+      loadMibConfiguration(1)//First mib
+      goToFirstSection()
+    }else{
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText(`Not valid files in folder`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+      shutdownMibMode()
+      return
+    }
+  })
+  chooseFolderDialog.exec();
+}
+
+//Generates a sample CSV file to help users understand the expected format
+//Contains "Hello;Hola" as an example of source;translation pairs
+function createCSVFile(){
+  fs.writeFile(`./NewCsv.csv`,Buffer.from("EFBBBF48656C6C6F3B486F6C610D0A","hex"),{
+    encoding: "utf8",
+    flag: "w",
+    mode: 0o666
+  },(err) => {
+    if (err){
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText("ERROR! .csv could not be created D:\n")
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }else{
+      errorMessageBox.setWindowTitle("Error")
+      errorMessageBox.setText(`New .csv created in root folder sucessfully`)
+      errorMessageButton.setText("                                                Ok                                              ")
+      errorMessageBox.exec()
+    }
+  })
+}
+
+//Stores the currently selected file path. This is used for hexView
+function setSelectedMainProgramFile(filePath){
+  selectedFile = filePath
+}
+
+//Updates the address input fields based on whether string or pointer values are provided
+function updateNeccesaryHexValues(values){
+  if(values.firstString){
+    firstStringAddressLineEdit.setText(values.firstString)
+    lastStringAddressLineEdit.setText(values.postLastString)
+  }else{
+    firstPointerAddressLineEdit.setText(values.firstPointer)
+    lastPointerAddressLineEdit.setText(values.postLastPointer)
+  } 
 }
 
 //Toolbar and main Window--------------------------------------------------------
@@ -4471,17 +4747,21 @@ const mainMenu = new QMenu()
 const mainMenuAction1 = new QAction();
 const mainMenuAction2 = new QAction();
 const mainMenuAction3 = new QAction();
-const mainMenuAction4 = new QAction();
+const mainMenuAction4 = new QAction(); //Open all .mib files in folder
 const mainMenuAction5 = new QAction();
 const mainMenuAction6 = new QAction();
+const mainMenuAction7 = new QAction();
+const mainMenuAction8 = new QAction();
 
 mainMenu.setTitle("Menu")
 mainMenuAction1.setText('Load file');
 mainMenuAction2.setText('Load Pointers Table');
 mainMenuAction3.setText('Create a Pointers Table for this file');
-mainMenuAction4.setText('Align two csv by rows');
-mainMenuAction5.setText("About");
-mainMenuAction6.setText('Exit');
+mainMenuAction4.setText('Open all .mib files in folder');
+mainMenuAction5.setText('Align two csv by rows');
+mainMenuAction6.setText('Create .csv file');
+mainMenuAction7.setText("About");
+mainMenuAction8.setText('Exit');
 
 mainMenu.addAction(mainMenuAction1)
 mainMenu.addAction(mainMenuAction2) 
@@ -4489,6 +4769,8 @@ mainMenu.addAction(mainMenuAction3)
 mainMenu.addAction(mainMenuAction4)
 mainMenu.addAction(mainMenuAction5)
 mainMenu.addAction(mainMenuAction6)
+mainMenu.addAction(mainMenuAction7)
+mainMenu.addAction(mainMenuAction8)
 
 const encodingMenu = new QMenu()
 encodingMenu.setTitle("Encoding: UTF-8")
@@ -4563,10 +4845,17 @@ encodingMenuAction2.addEventListener("triggered",function () {setShiftJISEncodin
 fileSizeMenuAction1.addEventListener("triggered",function () {fileSize(0)})
 fileSizeMenuAction2.addEventListener("triggered",function () {fileSize(1)})
 
-//Align two csv by rows----------------------------------------------------------
+//Open all .mib strings in folder
+mainMenuAction4.addEventListener("triggered", function (){openAndProcessAllMibs()})
 
-mainMenuAction4.addEventListener("triggered", function (){
+//Align two csv by rows----------------------------------------------------------
+mainMenuAction5.addEventListener("triggered", function (){
   alignTwoCsv()
+})
+
+// Create .csv file
+mainMenuAction6.addEventListener("triggered", function (){
+  createCSVFile()
 })
 
 //About----------------------------------------------------------
@@ -4576,7 +4865,7 @@ aboutDialog.setWindowTitle('About')
 aboutDialog.setInlineStyle(`
 background-color:white;
 `)
-mainMenuAction5.addEventListener("triggered",function (){
+mainMenuAction6.addEventListener("triggered",function (){
   aboutDialog.exec()
 })
 
@@ -4607,7 +4896,7 @@ aboutDialogLayout.addWidget(aboutMadeByWidget)
 
 const aboutTitleLabel = new QLabel()
 aboutTitleLabel.setTextInteractionFlags(1)
-aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.1.1")
+aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.2")
 const aboutTitleLayout = new QBoxLayout(0)
 aboutTitleLayout.addWidget(aboutTitleLabel)
 aboutTitleWidget.setLayout(aboutTitleLayout)
@@ -4747,7 +5036,6 @@ listWidget.addEventListener("clicked",() => {
     pointerValuesLabel.setText(`Pointer HexValues: ${pointersHexValues[listWidget.currentRow()].toString("hex").toUpperCase()}`)
 
   }
-
   highlightPointers()
 })
 
@@ -4821,16 +5109,16 @@ font-size:13px;
 height:200px;
 `)
 
-const clipboard = QApplication.clipboard();
+// const clipboard = QApplication.clipboard();
 
 //If for some reason this program is focused when the clipboard is
 //empty, the clipboard is changed to " ". For some reason if you try to
-//paste a empty clipboard to a QPlainTextEdit causes a crash, this measure avoid that.
-stringEditorTextEdit.addEventListener("FocusIn",function(){
-if(clipboard.text(QClipboardMode.Clipboard) ===""){
-  clipboard.setText(" ")
-}
-})
+//paste an empty clipboard to a QPlainTextEdit causes a crash, this measure avoid that.
+// stringEditorTextEdit.addEventListener("FocusIn",function(){
+// if(clipboard.text(QClipboardMode.Clipboard) ===""){
+//   clipboard.setText(" ")
+// }
+// })
 
 //MWA:Characters per line------------------------------------------------------------
 const characters16 = new QWidget();
@@ -4848,10 +5136,10 @@ choosedCharacters.setInputMask("99")
 characters16Layout.addWidget(choosedCharacters)
 
 const characters16Button = new QPushButton();
-characters16Button.setText(`characters per line`)
+characters16Button.setText(`Characters per line`)
 characters16Layout.addWidget(characters16Button)
 
-characters16Button.addEventListener('clicked',function (){specificCharactersPerLine(0)});
+characters16Button.addEventListener('clicked',function (){specificCharactersPerLine()});
 // stringEditorTextEdit.addEventListener("cursorPositionChanged",function (){
 // })
 
@@ -5031,7 +5319,7 @@ height:0px;
 
 function rezisePointersTableLineEdit() {
 
-  if(pointersTableMode===true){
+  if(pointersTableModeON===true){
     pointersTableAddresses.setInlineStyle(`
     flex-direction:column;
     height:40x;
@@ -5269,32 +5557,32 @@ pointersViewerRight.setInlineStyle(`
 flex:1;
 `)
 
-const pointersViewerlistWidget = new QListWidget()
+const pointersViewerFull = new QListWidget()
 const pointersViewerlistWidgetLayout = new QBoxLayout(1);
 
-pointersViewerlistWidget.setLayout(pointersViewerlistWidgetLayout)
-pointersViewerlistWidget.setInlineStyle(`
+pointersViewerFull.setLayout(pointersViewerlistWidgetLayout)
+pointersViewerFull.setInlineStyle(`
 height:150px;
 border-style:solid;
 border-width:3px;
 background-color:white;
 `)
 
-pointersViewerlistWidget.setSizePolicy(4,4)
+pointersViewerFull.setSizePolicy(4,4)
 const pointersViewerButtonToHide00 = new QCheckBox()
 pointersViewerButtonToHide00.setEnabled(false)
 pointersViewerButtonToHide00.setContentsMargins(0,0,0,0)
 pointersViewerButtonToHide00.setText("Hide 0's of viewer")
 pointersViewerLeftLayout.addWidget(pointersViewerButtonToHide00)
 
-const pointersViewerForSharedPointersListWidget = new QListWidget()
-pointersViewerForSharedPointersListWidget.setEnabled(false)
-pointersViewerForSharedPointersListWidget.setInlineStyle(`
+const pointersViewerSpecific = new QListWidget()
+pointersViewerSpecific.setEnabled(false)
+pointersViewerSpecific.setInlineStyle(`
 height:60px;
 width:110px;
 background-color:white;
 `)
-pointersViewerLeftLayout.addWidget(pointersViewerForSharedPointersListWidget)
+pointersViewerLeftLayout.addWidget(pointersViewerSpecific)
 
 const pointersEditor = new QLineEdit()
 pointersEditor.setEnabled(false)
@@ -5320,10 +5608,10 @@ pointersViewerLeftLayout.addWidget(pointersEditorWidget)
 
 //When a item in the pointers viewer list widget is selected, the pointer(s) is set
 //into the editor.
-pointersViewerForSharedPointersListWidget.addEventListener("itemSelectionChanged",function(){
+pointersViewerSpecific.addEventListener("clicked",function(){
 
-  pointersEditor.setText(`${pointersViewerForSharedPointersListWidget.currentItem().text()}`)
-  pointersEditorLabel.setText(`#${pointersViewerForSharedPointersListWidget.currentRow()+1} `)
+  pointersEditor.setText(`${pointersViewerSpecific.currentItem().text()}`)
+  pointersEditorLabel.setText(`#${pointersViewerSpecific.currentRow()+1} `)
 
 })
 
@@ -5340,61 +5628,55 @@ const pointersEditorRealocateButton = new QPushButton()
 pointersEditorRealocateButton.setEnabled(false)
 
 pointersEditorRealocateButton.setText("Move to new string")
-pointersEditorRealocateButton.setToolTip("Relocate the selected pointer to a new string (If there are space to do it) and save.")
+pointersEditorRealocateButton.setToolTip("Relocate the selected pointer to a new string (If there are space to do it) and save.\n\nNote: If the selected pointer address is left in emtpy in the above typing field\nit will trigger an hex viewer to choose manually the address where to put the text.\nIf the address into the field is different, it will try to put the text there.\nIf the selected pointer address and the one in the field are the same,\nit will try to put the text at the end of the string section (faster method).")
 pointersViewerLeftLayout.addWidget(pointersEditorRealocateButton)
 
 //Change the values of a pointer to make it match with a new empty string
 pointersEditorRealocateButton.addEventListener("clicked",function(){
   relocateToNewString()
-  saveAndPrepare()
-  listWidget.scrollToBottom()
 })
 
-pointersViewerRightLayout.addWidget(pointersViewerlistWidget)
+pointersViewerRightLayout.addWidget(pointersViewerFull)
 pointersViewerButtonToHide00.addEventListener("clicked",function(){
   hideShow()
 })
 
 
-//When a item in the pointers viewer is selected,
+//When a item in the pointers viewer is selected (usually by highlightPointers),
 //this add a Widget right above of it, the widget
 //has exactly the same values of the pointer but with red
 //color (if is the first) or blue (for the rest). Also add a enumeration
-//to the pointers viewer and the shared pointers viewer.
-pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
+//to the pointers viewer and the specific pointers viewer.
+pointersViewerFull.addEventListener("itemSelectionChanged",function (){
 
   let i =0;
   let k = 0;
   let phase = 0
   let counter =1
-  sharedPointers=1
+  quantityOfSharedPointers=1
 
-  pointersViewerForSharedPointersListWidget.clear()
+  pointersViewerSpecific.clear()
   pointersEditor.clear()
   pointersEditorLabel.setText("#n")
 
   while(extractedPointersIn4[i] != undefined){
     
-    if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerlistWidget.currentItem().text().toUpperCase() && phase===0){
+    if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerFull.currentItem().text().toUpperCase() && phase===0){
       
-
       pointerAddressLabel.setText(`Pointer Address: ${addressOfEachPointer[i].toString(16).toUpperCase()}`)
 
-
-
-      
       if(oldSelectedString != -1){
 
-        pointersViewerlistWidget.removeItemWidget(pointersViewerlistWidget.item(oldSelectedString))
+        pointersViewerFull.removeItemWidget(pointersViewerFull.item(oldSelectedString))
         
-        while(oldMatchedSharedPointers[k]!=undefined){
-          pointersViewerlistWidget.removeItemWidget(pointersViewerlistWidget.item(oldMatchedSharedPointers[k]))
+        while(itemPositionOfSharedPointers[k]!=undefined){
+          pointersViewerFull.removeItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[k]))
           k=k+1;
         }
-        oldMatchedSharedPointers=[]
+        itemPositionOfSharedPointers=[]
         k=0;
       }
-      if(pointersViewerlistWidget.currentItem().text() ==="00000000"||pointersViewerlistWidget.currentRow() ===0){
+      if(pointersViewerFull.currentItem().text() ==="00000000"||pointersViewerFull.currentRow() ===0){
         break
       }
 
@@ -5402,20 +5684,20 @@ pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
       let pointerViewerListQWidgetLayout = new FlexLayout
       pointerViewerListQWidget.setLayout(pointerViewerListQWidgetLayout)
       let pointerViewerListQWidgetText = new QLabel
-      pointerViewerListQWidgetText.setText(`${pointersViewerlistWidget.item(i).text()}` + ` ${counter}`)
+      pointerViewerListQWidgetText.setText(`${pointersViewerFull.item(i).text()}` + ` ${counter}`)
       pointerViewerListQWidgetText.setInlineStyle(`
       color:red;
       margin: 0 1 0 0;
       `)
       pointerViewerListQWidgetLayout.addWidget(pointerViewerListQWidgetText)
-      pointersViewerlistWidget.setItemWidget(pointersViewerlistWidget.item(i),pointerViewerListQWidget)
+      pointersViewerFull.setItemWidget(pointersViewerFull.item(i),pointerViewerListQWidget)
       
       phase=1;
       oldSelectedString = i;
       
       const tempItem = new QListWidgetItem()
-      tempItem.setText(pointersViewerlistWidget.item(i).text())
-      pointersViewerForSharedPointersListWidget.addItem(tempItem)
+      tempItem.setText(pointersViewerFull.item(i).text())
+      pointersViewerSpecific.addItem(tempItem)
       
       let pointerViewerListQWidget2 = new QWidget()
       let pointerViewerListQWidgetLayout2 = new FlexLayout
@@ -5427,27 +5709,27 @@ pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
       margin-left:30px;
       `)
       pointerViewerListQWidgetLayout2.addWidget(pointerViewerListQWidgetText2)
-      pointersViewerForSharedPointersListWidget.setItemWidget(pointersViewerForSharedPointersListWidget.item(0),pointerViewerListQWidget2)
+      pointersViewerSpecific.setItemWidget(pointersViewerSpecific.item(0),pointerViewerListQWidget2)
       counter = counter+1;
       
-    }else if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerlistWidget.currentItem().text().toUpperCase() && phase===1){
+    }else if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerFull.currentItem().text().toUpperCase() && phase===1){
       let pointerViewerListQWidget2 = new QWidget()
       let pointerViewerListQWidgetLayout2 = new FlexLayout
       pointerViewerListQWidget2.setLayout(pointerViewerListQWidgetLayout2)
       let pointerViewerListQWidgetText2 = new QLabel
-      pointerViewerListQWidgetText2.setText(`${pointersViewerlistWidget.item(i).text()}` + `  ${counter}`)
+      pointerViewerListQWidgetText2.setText(`${pointersViewerFull.item(i).text()}` + `  ${counter}`)
       pointerViewerListQWidgetText2.setInlineStyle(`
       color:midnightblue;
       margin: 0 1 0 0;
       `)
       pointerViewerListQWidgetLayout2.addWidget(pointerViewerListQWidgetText2)
-      pointersViewerlistWidget.setItemWidget(pointersViewerlistWidget.item(i),pointerViewerListQWidget2)
-      sharedPointers=sharedPointers+1;
-      oldMatchedSharedPointers[k]= i
+      pointersViewerFull.setItemWidget(pointersViewerFull.item(i),pointerViewerListQWidget2)
+      quantityOfSharedPointers=quantityOfSharedPointers+1;
+      itemPositionOfSharedPointers[k]= i
       
       const tempItem = new QListWidgetItem()
-      tempItem.setText(pointersViewerlistWidget.item(i).text())
-      pointersViewerForSharedPointersListWidget.addItem(tempItem)
+      tempItem.setText(pointersViewerFull.item(i).text())
+      pointersViewerSpecific.addItem(tempItem)
       
       let pointerViewerListQWidget3 = new QWidget()
       let pointerViewerListQWidgetLayout3 = new FlexLayout
@@ -5459,16 +5741,17 @@ pointersViewerlistWidget.addEventListener("itemSelectionChanged",function (){
       margin-left:35px;
       `)
       pointerViewerListQWidgetLayout3.addWidget(pointerViewerListQWidgetText3)
-      pointersViewerForSharedPointersListWidget.setItemWidget(pointersViewerForSharedPointersListWidget.item(k+1),pointerViewerListQWidget3)
+      pointersViewerSpecific.setItemWidget(pointersViewerSpecific.item(k+1),pointerViewerListQWidget3)
       
       counter = counter+1;
       k=k+1
     }
     i=i+1;
   }
-  oldMatchedSharedPointers.unshift(pointersViewerlistWidget.currentRow())
-
-  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${sharedPointers})`)
+  itemPositionOfSharedPointers.unshift(pointersViewerFull.currentRow())
+  pointersViewerSpecific.setCurrentRow(0)
+  
+  pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${quantityOfSharedPointers})`)
 
 })
 
@@ -5502,14 +5785,14 @@ const csvButton = new QPushButton();
 csvButton.setText("Translate strings using a .csv")
 csvTranslatorLayout.addWidget(csvButton)
 csvButton.setToolTip("Use a .csv with semicolons to translate a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.\nMatch only the complete string.")
-csvButton.addEventListener("clicked",function (){csvTranslation()})
+csvButton.addEventListener("clicked",function (){csvTranslation(false)})
 csvButton.setEnabled(false)
 
 const csvButton2 = new QPushButton();
 csvButton2.setText("Translate strings partially using a .csv")
 csvTranslatorLayout.addWidget(csvButton2)
 csvButton2.setToolTip("Use a .csv with semicolons to translate a group of strings. The \n.csv must contain two columns, the first must have translated strings\nand the second one is for the untranslated text. Each string\nmust be separated from another with at least one row of space and\nboth strings must start in the same row.\nMatch words or phrases inside a string.")
-csvButton2.addEventListener("clicked",function (){csvTranslation(1)})
+csvButton2.addEventListener("clicked",function (){csvTranslation(true)})
 csvButton2.setEnabled(false)
 
 const translatedStringsQProgressDialog = new QProgressDialog()
@@ -5532,7 +5815,7 @@ const exportAllButton = new QPushButton();
 exportAllButton.setText("Export all the data to a .csv")
 exportAllDataLayout.addWidget(exportAllButton)
 exportAllButton.setToolTip("Export all the data found in the file into a comfy .csv\nData sorting is up to you.")
-exportAllButton.addEventListener("clicked",function() {exportAllSelection()})
+exportAllButton.addEventListener("clicked",function() {exportAllSelectionScreen()})
 exportAllButton.setEnabled(false)
 
 //RWA: MHG Wii Pointer Button--------------------------------------------
@@ -5588,20 +5871,16 @@ autoCharaAdjust.setEnabled(false)
 //   }
 // })
 
-const fileDialog = new QFileDialog();
 let errorMessageBox = new QMessageBox()
 let errorMessageButton = new QPushButton()
 errorMessageButton.setInlineStyle(`
-
 `)
 errorMessageBox.setDetailedText("Task completed.")
 errorMessageBox.addButton(errorMessageButton)
 
-fileDialog.setFileMode(0)
-
 mainMenuAction1.addEventListener('triggered', function () {
   
-  if(pointersTableMode===true){
+  if(pointersTableModeON===true){
     removePointersTable()
   }else{
     loadFile()
@@ -5609,85 +5888,96 @@ mainMenuAction1.addEventListener('triggered', function () {
 
 })
 
-mainMenuAction6.addEventListener('triggered', function (){
+mainMenuAction7.addEventListener('triggered', function (){
   let exit = new QApplication()
   exit.exit(0)
 })
-saveSettingsButton.addEventListener("clicked",saveAndPrepare)
-saveSettingsButton2.addEventListener("clicked",function (){saveAndPrepare2()})
+saveSettingsButton.addEventListener("clicked",function (){saveAndPrepare(true)})
+saveSettingsButton2.addEventListener("clicked",function (){saveAndPreparePointerless(true)})
 
 
-//If settings.cfg exist, this will get all it info.
-if( fs.existsSync(`./settings.cfg`) === false){
+function parseOldCfgFormat(cfgBuffer) {
+  const projectsConfHexArr = cfgBuffer.toString("hex").split("5b53504c49545d0d0a");
+  const configurations = [];
 
-fs.writeFile(`./settings.cfg`,`${Buffer.from("310d0a0d0a0d0a0d0a0d0a0d0a5b53504c49545d0d0a32", "hex")}`,
-(err) => {
-  if (err){
-    errorMessageBox.setWindowTitle("Error")
-    errorMessageBox.setText("ERROR! settings.cfg could not be created D:\n")
-    errorMessageButton.setText("                                                Ok                                              ")
-    errorMessageBox.exec()
+  for (const sectionHex of projectsConfHexArr) {
+    if (!sectionHex) continue;
+
+    const parts = sectionHex.split("0d0a");
     
-  }
-  else {
-    console.log("settings.cfg created successfully\n");
-  }
-})
-
-}else if(fs.existsSync(`./settings.cfg`) === true){
-
-  console.log("settings.cfg loaded successfully\n");
-  let projectsConfBuff =fs.readFileSync(`./settings.cfg`).toString("hex")
-
-  if(projectsConfBuff.includes("5b53504c49545d0d0a") === true){
-
-    projectsConfHexArr = projectsConfBuff.split("5b53504c49545d0d0a")
-
-
-  }else{
-    projectsConfHexArr = [projectsConfBuff]
-  }
-
-  if(
-  (projectsConfHexArr[0].split("0d0a")[0]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[1]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[2]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[3]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[4]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[5]) === '' ||
-  (projectsConfHexArr[0].split("0d0a")[6]) === '' ){
-
-    console.log("Not valid data :/, hex spaces will be empty")
-
-  }else{
-    console.log("Valid data.")
-    sectionNameNumber.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[0], "hex").toString("utf8") + " ")
+    const decode = (hex) => {
+      if (!hex || hex === "2a") return "";
+      return Buffer.from(hex, "hex").toString("utf8");
+    };
     
-    if(projectsConfHexArr[0].split("0d0a")[1] === "2a"){
+    const sectionNumber = parseInt(decode(parts[0]), 10);
+    if (isNaN(sectionNumber)) continue;
 
-    }else{
-      sectionNameLineEdit.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[1], "hex").toString("utf8"))
+    configurations.push({
+      sectionNumber: sectionNumber,
+      sectionName: decode(parts[1]),
+      firstPointerAddress: decode(parts[2]),
+      lastPointerAddress: decode(parts[3]),
+      firstStringAddress: decode(parts[4]),
+      lastStringAddress: decode(parts[5]),
+      filePath: decode(parts[6]),
+      encoding: decode(parts[7]) === "0" ? "UTF8" : "SJIS"
+    });
+  }
+  return configurations;
+}
+
+
+/**
+* Runs at application startup to prepare the configuration file.
+* Incorporates backwards compatibility logic to convert older .cfg files.
+*/
+function initializeSettings(){
+  try {
+    // 1. If the modern .json file exists, use it directly.
+    if (fs.existsSync("./settings.json")) {
+      console.log("settings.json found, loading configuration...");
+      loadConfiguration();
+      return;
     }
 
-    if(projectsConfHexArr[0].split("0d0a")[2] === "2a"){
+    // 2. If not, find an old .cfg file to convert.
+    if (fs.existsSync("./settings.cfg")) {
+      console.log("Old .cfg file found. Converting to .json...");
+      const cfgContent = fs.readFileSync("./settings.cfg");
+      const configurations = parseOldCfgFormat(cfgContent);
+      
+      const jsonString = JSON.stringify(configurations, null, 2);
+      fs.writeFileSync("./settings.json", jsonString, 'utf8');
+      console.log("Conversion successful. New settings.json created.");
 
-    }else{
-      firstPointerAddressLineEdit.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[2], "hex").toString("utf8"))
+      fs.renameSync("./settings.cfg", "./settings.cfg" + '.bak');
+      console.log("The old .cfg file has been renamed to .cfg.bak");
+
+      loadConfiguration(); // Load from the newly created file.
+      return;
     }
 
-    if(projectsConfHexArr[0].split("0d0a")[3] === "2a"){
+    // 3. If no configuration file exists, create a new, empty one.
+    console.log("No configuration file found, creating settings.json by default...");
+    fs.writeFileSync("./settings.json", '[]', 'utf8');
+    console.log("settings.json successfully created.");
+    
+    setDefaultValues();
+    start();
 
-    }else{
-      lastPointerAddressLineEdit.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[3], "hex").toString("utf8"))
-    }
-
-    firstStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[4], "hex").toString("utf8"))
-    lastStringAddressLineEdit.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[5], "hex").toString("utf8"))
-    filePathQLineEditRead.setText(Buffer.from(projectsConfHexArr[0].split("0d0a")[6], "hex").toString("utf8"))
-    selectedFile = [`${`${Buffer.from(projectsConfHexArr[0].split("0d0a")[6], "hex").toString("utf8")}`}`]
-    start()
+  }catch (err) {
+    console.error("Error during initialization:", err);
+    errorMessageBox.setWindowTitle("Initialization Error");
+    errorMessageBox.setText("ERROR! The configuration file could not be created, read, or converted..");
+    errorMessageButton.setText("Ok");
+    errorMessageBox.exec();
+    
+    setDefaultValues();
+    start();
   }
 }
+initializeSettings()
 
 //CS:Drag and drop configurations---------------------------
 win.setAcceptDrops(true);
@@ -5700,7 +5990,7 @@ win.addEventListener(WidgetEventTypes.DragEnter, (e) => {
 //Get the path of any file dropped into the tool window
 win.addEventListener(WidgetEventTypes.Drop, (e) => {
 
-  if(pointersTableMode===true){
+  if(pointersTableModeON===true){
 
   }else{
     let dropEvent = new QDropEvent(e);
@@ -5718,6 +6008,13 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
     }
   }
 });
+
+win.addEventListener("Close",function(){
+  shutdownHexView()
+  process.exit(0);
+})
+
+
 
 //Global font---------------------------------------------
 // const appFont = new QFont()
@@ -5751,5 +6048,8 @@ font-size:12px;
 //CS:Show window------------------------------------------
 win.setCentralWidget(rootView);
 win.show();
+
+
+export {setShiftJISEncoding,setUTF8Encoding,start,relocateStringPosition,selectedFile as selectedMainProgramFile,setSelectedMainProgramFile,updateNeccesaryHexValues}
 
 global.win = win;

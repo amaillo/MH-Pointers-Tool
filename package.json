@@ -19,7 +19,7 @@
   "author": "amaillo",
   "license": "MIT",
   "dependencies": {
-    "@nodegui/nodegui": "0.59.2",
+    "@nodegui/nodegui": "0.73.0",
     "encoding-japanese": "^2.0.0"
   },
   "devDependencies": {

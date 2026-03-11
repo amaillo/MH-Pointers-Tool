@@ -19,3 +19,9 @@ Pointers Tables
 
 # Ignore settings files
 settings
+
+# Ignore settings files
+settings.json
+
+# Ignore ignored-folder (kek)
+ignored-folder
