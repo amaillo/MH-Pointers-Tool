@@ -1,13 +1,13 @@
 {
   "name": "mh-pointers-tool",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "A modding tool to edit strings in old monster hunter games, and hopefully other games too.",
   "main": "index.js",
   "scripts": {
     "build": "webpack build ./src/index.js",
-    "test": "qode ./src/index.js",
-    "start": "webpack && qode ./src/index.js",
-    "debug": "webpack --devtool source-map && qode --inspect --enable-source-maps ./src/index.js"
+    "test": "qode ./dist/index.js",
+    "start": "webpack --mode development && qode ./dist/index.js",
+    "debug": "webpack --devtool source-map && qode --inspect --enable-source-maps ./dist/index.js"
   },
   "keywords": [
     "monster",

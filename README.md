@@ -1,165 +1,236 @@
 # MH Pointers Tool
 
-This tool can manage the strings of any file that meets [certain parameters](#compatible-estructure), organizing them in a simple GUI where they can be edited/translated, or exported to a csv file. When a string is edited, it can take into account its pointers (if the position/address of those are given by the user), so if a string is edited the pointers will change too, maintaining the logic of where the string is in the file and making possible to get more free space to translate or change strings. You can still use the tool without providing any pointers but the max size of a string will not be altered, in other words, if you overwrite a string with a bigger one the new string will be cut to maintain the size of the original string.
+This tool can manage the strings of any file that meets [certain parameters](#compatible-structure), organizing them in a simple GUI where they can be edited/translated, or exported to a CSV file. 
 
-Supports Shift-JIS and UTF8 encodings, Little Endian and Big Endian.
+When a string is edited, the tool can take its pointers into account (if their addresses/offsets are provided), updating them automatically to maintain file integrity and potentially free up space for longer translations. If you don't provide pointers, the original string length is preserved, and any new text that exceeds it will be truncated.
 
-It also has a lot of other [features](#features), check below to know more!
+**Supported encodings:** Shift-JIS and UTF-8 (both Little and Big Endian).
+
+Check the [features](#features) section below to learn more!
 
 ## Tested games
 
-This tool was used to translate **Monster Hunter G** for the Playstation 2 from Japanese to English and to extract strings from the files of several other **Monster Hunter** games.
+This tool was originally used to translate **Monster Hunter G** (PlayStation 2) from Japanese to English, and to extract strings from several other **Monster Hunter** games.
 
-It has been also tested with **Monster Hunter Portable**, **Monster Hunter 2 (Dos)**, **Monster Hunter G Wii**, **Monster Hunter Tri (E)** (The Japanese release has a weird encryption, so I was not able to test it there) and both **Monster Hunter Portable 3rd** **non**-**HD** and **HD** versions with excellents results.
+It has also been tested with:
+- **Monster Hunter 1** (Japanese)
+- **Monster Hunter Portable** (and Freedom)
+- **Monster Hunter 2 (Dos)**
+- **Monster Hunter G** (Wii)
+- **Monster Hunter Tri** (USA, EU and JP)
+- **Monster Hunter Portable 3rd** (both non-HD and HD versions)
 
-The strings of any game that has files with a similar structure must be also editable with this tool.
+...with excellent results!
 
-I want to add that some of the before-mentioned games (the PS2 ones) were made using [CodeWarrior](https://en.wikipedia.org/wiki/CodeWarrior), these files have as header MWo3 (Metrowerks overlay 3?). 
-
-If you do some successful testing with any other games, please let me know to add it to this list ^-^O.
+If your game uses files with a similar structure, it should work as well.
 
 ## Compatible structure
 
-- The strings must be together but separated from each other by at least one null value (00).
+- **Strings must be contiguous**, separated from each other by at least one null byte (00).
 
-Example: 
-82 50 00 82 51 00 82 52 00
+Example:
+82 50 00 82 51 00 82 52 00 00 00 00
 
-These hex values are "１　２　３".
+These hexadecimal values correspond to the fullwidth characters "１　２　３" (1 2 3).
 
-- The pointers must be 4 bytes each. Can be both Big Endian (BE) or Little Endian (LE). Theoretically, they can be bigger, but bigger ones have not been tested yet since I don't have something to test them in the first place.
+- **Pointers must be 4 bytes each**, and can be either Big Endian (BE) or Little Endian (LE). Larger pointers might work in theory, but haven't been tested due to lack of examples.
 
-Examples:<br />
+Examples (each line shows 4 different pointers):
 <pre>
-F0 F3 2C 00 10 F4 2C 00 30 F4 2C 00 //LE
+F0 F3 2C 00 10 F4 2C 00 20 F4 2C 00 30 F4 2C 00 //LE
 
-78 1F 00 00 79 1F 00 00 92 1F 00 00 //LE
+74 1F 00 00 84 1F 00 00 92 1F 00 00 00 2F 00 00 //LE
 
-00 00 17 68 00 00 17 70 00 00 17 80 //BE
+00 00 20 68 00 00 30 68 00 00 40 68 00 00 52 80 //BE
 
-80 62 95 B4 80 62 95 C4 80 62 AE 14 //BE</pre>
-
-Each line has 4 different pointers.
+80 62 95 B4 80 62 95 C4 80 62 AE 14 80 62 AE 14 //BE
+</pre>
 
 ## Values to set up
 
-You will need at least 2 values in hexadecimal (without 0x), the address of the first string and the address of the next byte different from 00 that goes after the last string. The Hex values must be Big Endian.
+You'll need at least two hexadecimal values (without the "0x" prefix):
+- The **offset** of the first string
+- The **offset** of the first non-null byte after the last string
 
-Example:<br />
+All offset values must be provided in **Big Endian** format.
+
+Check this example:
 <pre>
-Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br />
-00000000 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
-00000010 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
-00000020 82 50 00 00 82 51 00 00 82 52 00 00 01 02 03 00<br /></pre>
+Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+00000000 4D 57 6F 33 01 00 00 00 00 00 00 00 00 00 00 00<br />
+.<br />
+.<br />
+.<br />
+0009A910 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+0009A920 82 50 00 00 82 51 00 00 82 52 00 00 43 65 70 68 // (１　, ２　, ３, Ceph
+0009A930 61 6C 6F 73 20 46 69 6E 2B 00 00 00 43 6F 72 61 // alos Fin+, Cora
+0009A940 6C 20 43 70 68 6C 6F 73 20 53 63 6C 00 00 00 00 // l Cphlos Scl)  
+0009A950 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 // This section contains 5 strings...
+0009A960 20 A9 09 00 24 A9 09 00 28 A9 09 00 2C A9 09 00 
+0009A970 3C A9 09 00 00 00 00 00 00 00 00 00 00 00 00 00 // and 5 pointers
+0009A980 6C 16 00 00 00 00 02 63 08 22 06 00 00 00 00 00 // (unrelated data)
+0009A990 D0 07 00 00 C8 00 00 00 00 00 03 63 0C 17 06 00 // (unrelated data)
+</pre>
 
-The values to use would be 20 for the start and 2C for the end.
+In this example, for strings you would use:
+- **Start:** `09A920`
+- **End:** `09A960`
 
-The same goes for the address of the pointers.
+For pointers, remember they must be 4 bytes each, so the end offset should be right after the last byte of the last pointer:
+- **Start:** `09A960`
+- **End:** `09A974` (The last byte of the last pointer is on '09A973', so the correct value to setup is the next one: '09A974')
 
-To find these addresses you can use any standard hex editor like MadEdit.
+**Note:** These pointers point to specific offsets within the file. However, you may also encounter pointers that reference memory addresses in the console's RAM.
+
+You can find these offsets using any standard hex editor (like [MadEdit](https://sourceforge.net/projects/madedit/)).
 
 ## How does it look?
-<img alt="demo" src="./pngs/how_looks.png" height="280" />
+<img alt="demo" src="./pngs/how_looks.gif" height="280" />
 
 ## Features
 
--    **Easy handling** 
+- **Easy handling**  
+  Load a file via **Menu > Load file** or simply **drag and drop** it. Then, provide two hexadecimal offsets (without "0x"): the start of the string section and the end. 
 
-You need two hex addresses (without 0x), the first string address, and an address that marks the end of it group of strings. You will also need to choose a file, both by clicking Menu>Load file>Choose a file or **drag and dropping it**. Optionally you can add the address of the first string pointer and an address that marks the end of it group of pointers, by doing this each string can be edited more freely as long as there is enough free space (extra null values), since it is possible to make the strings longer than they were originally.
+  Optionally, you can also provide the start and end offsets for a pointer section that matches the strings. This allows you to edit strings more freely, as long as there's enough free space (extra null bytes) to expand them.
 
-Note: If a string is overwritten by a bigger one while using pointers, the last string will be cut to maintain the size of the file if there is not enough space.
+  > **Note:** When using pointers, if there isn't enough free space (null bytes) left when saving, the last string will be truncated to keep the file size intact.
 
--    **Strings and pointers editor** 
+- **Strings and pointers editor**  
+  The tool scans for null-separated strings and presents them in an editable list. You can also set a character limit per line to match in-game text box constraints.  
 
-This tool can get the strings that are separated from each other by a null value (00) and make a list of them to be edited easily. Also has an option to limit the number of characters per line, in case the width of an in-game window can't be changed.
+  Pointers are displayed in a separate list and update automatically when their target string is edited. You can also edit pointers manually—for example, to relocate a string to the end of the section.
 
-Additionally, there is a different list for pointers. Pointers on the list are updated automatically when a string that matches with any of them is edited. They also can be edited manually or even change their values to relocate it string after the last string of the section.
+  > **Note:** Pointers are read as Little Endian by default, but you can switch to Big Endian before loading strings.
 
-Note: By default the pointers are read in Little Endian but they can be read in Big Endian by checking that option before starting.
+-   **Search string**<br />
+	Quickly find any string (or part of it) within the list.
+  
+- **Detailed info panel**  
+  Displays useful data like available free space, string offsets and address in RAM (Not accurate), pointer offsets, and pointer values.
 
--   **Search string** 
+- **Section naming**  
+  Assign custom names to different string groups to keep your translation organized. Each "section" represents a region of the file. You have 255 sections for each settings file.
 
-Search for a string or part of it on the string list.
+- **CSV translation support**  
+  Already have a spreadsheet with original and translated text?  
+  The tool can import a UTF-8 `.csv` file (semicolon-separated, not commas) with two columns:  
+  - Column 1: Translated text  
+  - Column 2: Original text  
 
--   **A lot of additional info**
+  Each string pair must be on the same row, with blank rows between different strings.
 
-Available space to edit (calculated using null values), strings address, pointers address, pointers value etc.
+  **Example:**  
+  <img alt="CSV example" src="./pngs/example1.png" height="280" />  
+  *The image above shows 4 different strings in the expected format.*
 
--   **Organize each section that is being translated** 
+-	**Exportable data**<br />
+	*Added in v1.1.0*
 
-You can add a name to classify each part of a group of strings that is being translated. This is called 'Section name'. In other words, represents a region of the file.
+	You can export data to a `.csv` file with the following options:<br />
+	1. **Strings only** from a current section.<br />
+	2. **All data** (strings, pointers, addresses, etc.) from a current section.<br />
+	3. **Strings only** from all sections.<br />
+	4. **All data** from all sections.<br />
 
--   **Cvs translation support** 
+    If **Pointers Table mode** is active, you can also export strings or all data from every `.pt` file in the `Pointers Tables` folder. You can optionally choose to include or exclude the filename and section name in the export file.
 
-Do you already have a spreadsheet with the original text and the translated one? This tool has the option to translate the strings by using a UTF8 ".csv". The .csv must be divided by semicolons (not commas) and contain two columns. The first column must have the translated strings and the second one is for the untranslated text. Each string must be separated from another with at least one row of space and both strings must start in the same row.
+    To ensure compatibility with Excel and other spreadsheet software, the exported text is automatically adjusted:
+    - Lines containing a semicolon (`;`) are wrapped in quotation marks.
+    - Lines starting with `-` or `+` get a leading space.
+    - For strings with line breaks, a space is added at the start of each new line to prevent them from being split into separate entries during CSV import.
 
-Examples:
+-   **Align (merge) two CSV files**<br />
+    *Added in v1.1.0*
 
-<img alt="example1" src="./pngs/example1.png" height="280" />
+    If you have two separate CSV files—one with the original text and one with the translation—you can use this feature to automatically merge them into a single, aligned file. The output is a `.txt` file with both texts side-by-side, separated by semicolons, ready to be used for a CSV translation.
 
-There are 4 different strings in this example.
+    > **Note:** The output file uses the `.txt` extension because it's not recommended to open it directly with Excel. To use it, you must import the text file and select the correct encoding.
 
--   **Exportable data (1.1.0 Update)**
+-   **Pointers table support**<br />
+    *Added in v1.1.0*
 
-You can export to a .csv:
-1) Only strings of one specific section.
-2) Strings and the rest of data (pointers, addresses, etc.) of one specific section.
-3) Strings of all the following sections.
-4) Strings and the rest of the data of all the adjacent sections.
+    Some games like **Monster Hunter 2 (Dos)** and **Monster Hunter Portable 3rd** contain files in which strings use pointers tables that point to another pointer instead of directly pointing to a string. This 'main pointers table' or 'pointers table index' uses values that start with an offset of 0 (the start of the file) and each one of them points directly to the first pointer of a 'secondary pointers table'. Each pointer of this 'secondary pointers table' points to a string, using as offset the value of the main pointer + the value of the secondary pointer.
 
-If the pointers table mode is ON, you can even export the strings or all the data from all .pt files in the Pointers Tables folder. Optionally, you can add or remove the name of each file/section that will be exported.
+    **Example (extracted from MH2):**
 
-When exported, the following changes will be made to the exported text automatically:
+    <pre>
+    Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+    00000000 55 00 00 00 48 00 00 00 56 00 00 00 6C 05 00 00 //Main pointers
+    00000010 57 00 00 00 CA 0B 00 00 58 00 00 00 E7 22 00 00
+    00000020 59 00 00 00 F8 24 00 00 5A 00 00 00 FF 24 00 00
+    00000030 5B 00 00 00 06 25 00 00 5C 00 00 00 0D 25 00 00
+    00000040 FF FF FF FF FF FF FF FF 30 00 00 00 7B 00 00 00 //Secondary pointers #1
+    00000050 8B 00 00 00 E5 00 00 00 74 01 00 00 0A 02 00 00
+    00000060 7D 02 00 00 03 03 00 00 97 03 00 00 1F 04 00 00
+    00000070 A1 04 00 00 01 05 00 00 57 65 6C 6C 20 74 68 65 //Well then! (First set of strings start)
+    00000080 6E 21 0A 49 66 20 69 74 27 73 20 65 71 75 69 70 //If it's equip
+    .<br />
+    .<br />
+    .<br />
+    00000560 74 20 62 65 20 74 6F 64 61 79 3F 00 44 00 00 00 //Secondary pointers #2
+    00000570 57 00 00 00 7E 00 00 00 F8 00 00 00 72 01 00 00
+    00000580 EC 01 00 00 56 02 00 00 91 02 00 00 EC 02 00 00
+    00000590 53 03 00 00 AA 03 00 00 11 04 00 00 61 04 00 00
+    000005A0 C8 04 00 00 40 05 00 00 A7 05 00 00 F7 05 00 00
+    000005B0 57 65 20 73 65 6C 6C 20 65 71 75 69 70 6D 65 6E //We sell equipmen (Second set of strings start)
+    000005C0 74 2E 00 53 68 6F 70 27 73 20 61 6C 77 61 79 73 //t. Shop's always
+    .<br />
+    .<br />
+    .<br />
+    000024F0 65 0A 63 69 74 79 2E 00 04 00 00 00 44 4D 00 04
+    00002500 00 00 00 44 4D 00 04 00 00 00 44 4D 00 04 00 00
+    00002510 00 44 4D 00 //File ends here
+    </pre>
 
-* If a line of text contains a semicolon, quotation marks will be added at the end and start of the line.
+    The first main pointer is `48` at offset 0x4, and points to 0x48; the second one is `6C 05` at offset 0xC and points to 0x056C; the third one is `CA 0B` at offset 0x14 and points to 0x0BCA... you see the pattern?
 
-* If a line of text starts with '-' or '+', a space will be added at the start of it.
+    To use this feature, you need to provide the **start** and **end** offsets of the **main pointers table** (in this case, `0` and `40`) and the offset that marks the end of the last group of strings. By default, this last field is filled automatically, but if the file contains data between the last string and the end of the file, you must use the offset of that data instead. In this example, the default value (`2513`) is the needed one.
 
-* If a string contains one or more new lines between two sentences, a space will be added at the start of each new line. This ensures that a string with one or more new lines between sentences can be taken like one big string instead of separated into little strings since that space is used to separate one string from another one when a csv translation or an alignment is done.
+    > **Note for MHP3rd:** Some files require an additional **global offset** provided by the user. This is because the main pointer points to a series of 4 null values, so an extra offset is needed to correct the calculation.
 
-All these little changes are made to the exported text to ensure compatibility with Excel, csv translation, and csv alignment.
+    After filling in the required fields and continuing, a new window will appear. Here you must manually select the pointer(s) to be used. This creates a `.pt` (Pointers Table) file in the `MH-Pointers-Tool/Pointers Tables` folder. This file contains all the data related to the pointers table and will be loaded automatically in the future. You can also load it manually via **Menu > Load Pointers Table**.
 
--   **Align (merge) two csv into one file (1.1.0 Update)**
+-   **Monster Hunter Quest files (.mib/.bin) support**<br />
+    *Added in v1.2.0*
 
-Do you have all the original text and their translated counterpart in two different csv but need to align them to do a cvs translation? You can do it automatically by using this feature. It will return a .txt with both texts separated by semicolons, like a cvs format, and all their strings aligned one aside from the other.
+    Text from quest files can now be edited easily! Just put all your `.mib` or `.bin` files in the same folder, (make sure they are unencrypted) and then go to Menu > Open all .mib files in folder.
+    
+	Tested games:
+    - MH1 (JP, US, EU)
+    - MHG (PS2, Wii)
+    - MH2
+    - MHP/MHF1 (US, EU)
+    - MHP2/MHF2 (US, EU)
+    - MHP2G/MHFU (US, EU)
+    - MHP3RD
+    - MHTri (US, JP, UK/EU)
 
-Note: Don't try to change it extension and open it directly with Excel, you need to import it and select the correct encoding for the file. Because of this reason, the aligned file is ".txt" and not ".csv".
+    > **Note:** This is NOT a quest editor; it only works for the text contained in these files.
 
--   **Pointers table support (1.1.0 Update)**
+-   **CSV template creation**<br />
+    *Added in v1.2.0*
 
-I will briefly explain their structure.
+    A new menu option allows you to generate a CSV file with the correct format for translations.
 
-Some games like **Monster Hunter 2 (Dos)** and **Monster Hunter Portable 3rd** contain files in which strings use pointers tables that point to another pointer instead of directly pointing to a string. This 'main pointers table' or 'pointers table index' uses values that start with an offset of 0 (the start of the file) and each one of them points directly to the first pointer of a 'secondary pointers table'. Each pointer of this 'secondary pointers table' points to a string, using as offset the value of the main pointer + the value of the secondary pointer.
+-   **Hex viewer (hexView)**<br />
+    *Added in v1.2.0*
 
-Example:
-<pre>
-Offset   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F<br /> 
-00000000 00 00 00 00 00 00 00 00 CC 00 00 00 FF 01 01 00<br />
-.<br />
-.<br />
-.<br />
-000000C0 00 00 00 00 00 00 00 00 00 00 00 00 30 1F 00 00<br />
-000000D0 31 1F 00 00 00 00 00 00 00 00 00 00 00 00 00 00<br />
-.<br />
-.<br />
-.<br />
-00001FF0 00 00 00 00 00 00 00 00 FF FF FF FF 00 80 50 00<br /></pre>
+    A hexadecimal viewer has been integrated into the tool for two specific scenarios:
 
-The first main pointer is CC (204 in decimals), and points to 30 1F (7984), 204+7984 = 8188 = 1FFC, the value in 1FFC is null (00) but by using 31 1F (7985) the next value is a string: 80 50 (is １).
+    1. **When loading a file via Menu > Load**, the hexView window appears, allowing you to visually select the start and end offsets for strings and pointers. You can also search for specific text or hex values within the file.
+       
+       > **Tip:** To select a range, click two separate squares, or press Shift and drag the mouse (recommended method).
 
-This feature will require an interval of two addresses containing all the pointers of the main pointers table (in this case would be 0 and 10 or 08 and 10) and an address that marks the end of the last group of strings. By default, this address is the one from the last value in the file and the field is filled automatically with it, but if the file contains data between the last string and their end is necessary to use the address of this data instead of the default one.
-
-Additionally, for **Monster Hunter Portable 3rd**, some particular files need another value by part of the user, a global offset. This is because the main pointer points to a series of 4 null values, so is necessary to add an extra offset to correct that.
-
-After filling in the required fields, by continuing a new window will appear. Here the user must manually select the pointer(s) that will be used. After that, a .pt (Pointers Tables) file will be created in 'MH-Pointers-Tool/Pointers Tables'. In the .pt file is where all the data related to a Pointers Table is saved, after being made will be loaded automatically but it can also be loaded manually by selecting Menu>Load Pointers Table.
+    2. **When using 'Move to new string' without selecting a specific pointer**, hexView lets you choose the new position in the file where the string will be relocated.
 
 ## Installation (Windows and Linux)
 
 Download the latest package and execute it.
 
-For **Windows**, you will also need visual C++ runtime 2015-2022.
+For **Windows**, you will also need [Visual C++ Runtime 2015-2022](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-For **Linux**, you will also need NodeGui, then execute AppRun via the terminal using a command similar to this:
+For **Linux**, you will also need NodeGui. Then execute AppRun via the terminal using a command similar to this:
 ```
 sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
@@ -168,11 +239,11 @@ sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugin
 
 ### Windows (tested on Windows 11)
 
-1) Download and install Git, NodeJs 19.8.1 or latest, and Cmake.
+1. Download and install [Git](https://git-scm.com/), [Node.js](https://nodejs.org/) (19.8.1 or later), and [CMake](https://cmake.org/).
 
-Note: older NodeJs versions (16.xx-18.xx) could need files from Visual Studio, in that case, install 'windows-build-tools' or Visual Studio.
+   > **Note:** Older Node.js versions (16.x–18.x) may require files from Visual Studio. In that case, install `windows-build-tools` or Visual Studio.
 
-2) Open gitbash and type:
+2. Open Git Bash and run:
 
 ```
 git clone https://github.com/amaillo/MH-Pointers-Tool.git
@@ -186,28 +257,33 @@ npm start
 Linux Mint (tested on 21.1 Vera):
 ```
 sudo apt-get update
-sudo apt install -y git
-sudo apt-get install -y nodejs
-sudo apt install -y cmake
-sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
-sudo cd usr/lib/node_modules/MH-Pointers-Tool
-sudo npm install
-sudo npm start
+sudo apt install -y git nodejs cmake
+git clone https://github.com/amaillo/MH-Pointers-Tool.git
+cd usr/lib/node_modules/MH-Pointers-Tool
+npm install
+npm start
 ```
 
 Ubuntu (tested on 22.04 Jammy):
 ```
 sudo apt-get update
-sudo apt install -y git
-sudo apt install -y cmake
-sudo apt install libfuse2
-sudo apt install npm
+sudo apt install -y git cmake libfuse2 npm
 sudo npm install -g n
 sudo n latest
-sudo git clone https://github.com/amaillo/MH-Pointers-Tool.git
+git clone https://github.com/amaillo/MH-Pointers-Tool.git
 cd ~/MH-Pointers-Tool
-sudo npm install
-sudo npm start
+npm install
+npm start
+```
+
+Arch Linux (tested on March 2026)
+```
+sudo pacman -S --needed base-devel git nodejs npm cmake fuse2
+sudo pacman -S mesa glu
+git clone https://github.com/amaillo/MH-Pointers-Tool.git
+cd ~/MH-Pointers-Tool
+npm install
+npm start
 ```
 
 ### How to pack it
@@ -221,17 +297,17 @@ Then type the following to get the executable:
 npx nodegui-packer --pack dist
 ```
 
-For **Linux** users, if AppRun doesn't work, do this:
+**For Linux users:** If the resulting AppRun doesn't work, try the following:
 
 **Linux mint**
-1) Check MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool
-2) Open qt.conf
-3) Change "Plugins: = plugins" to<br />"Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins"
+1. Navigate to `MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool`
+2. Open `qt.conf`
+3. Change `Plugins: = plugins` to <br />`Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins`
 
-If you have NodeGui installed in another path use that path instead.
+(Use your actual NodeGui path if different)
 
 **Ubuntu**
-1) Open the terminal and type:
+Run the AppRun with the QT plugin path explicitly set:
 ```
 sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
@@ -239,7 +315,7 @@ If you have NodeGui installed in another path use that path instead.
 
 ## Special Thanks
 
-To all the members of the MH OldSchool discord for their support and knowledge, join now to play all the Monster Hunters from PS2 online! https://discord.gg/YzmeXb8
+To all the members of the [MH OldSchool Discord](https://discord.gg/YzmeXb8) for their support and knowledge. Join now to play all the Monster Hunters from PS2 online!
 
 ## License
 
