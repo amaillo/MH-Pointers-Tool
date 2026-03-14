@@ -4308,7 +4308,7 @@ function getAddressesForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
     postLastString = (nextNonZeroByte-1).toString(16).toUpperCase().padStart(pointers[0].length, '0').toUpperCase();
   }else{
 
-    if(isMultiple(nextNonZeroByte,4)){
+    if(isMultiple(nextNonZeroByte,4)||buffer[nextNonZeroByte]!==0){
       postLastString = nextNonZeroByte.toString(16).toUpperCase().padStart(pointers[0].length, '0').toUpperCase();
     }else{
       while(!isMultiple(nextNonZeroByte,4)){
@@ -4470,12 +4470,12 @@ async function openAndProcessAllMibs(){
       mibName = mibName.replaceAll(".mib","")
 
       const mibPath = selection+"/"+mibList[index]
-      const buffer = fs.readFileSync(mibPath);
-      const bufferHeader = buffer.subarray(0, 4)
+      const mibFileBuffer = fs.readFileSync(mibPath);
+      const mibFilebufferHeader = mibFileBuffer.subarray(0, 4)
 
-      if(bufferHeader.equals(Buffer.from('48000000', 'hex'))//MHG
-      ||bufferHeader.equals(Buffer.from('74000000', 'hex'))//MH2
-      ||(bufferHeader.equals(Buffer.from('40000000', 'hex')//MH1 (JP,US,EU)
+      if(mibFilebufferHeader.equals(Buffer.from('48000000', 'hex'))//MHG
+      ||mibFilebufferHeader.equals(Buffer.from('74000000', 'hex'))//MH2
+      ||(mibFilebufferHeader.equals(Buffer.from('40000000', 'hex')//MH1 (JP,US,EU)
       ))){
     
         const newMibObj = {
@@ -4490,7 +4490,7 @@ async function openAndProcessAllMibs(){
           path:mibPath
         }
 
-        const bufferEurOrDosChecker = buffer.subarray(96, 100)
+        const bufferEurOrDosChecker = mibFileBuffer.subarray(96, 100)
         const isEur = bufferEurOrDosChecker.readUIntLE(0,Buffer.from(bufferEurOrDosChecker).length)>65535
 
         if(isEur){
@@ -4503,11 +4503,11 @@ async function openAndProcessAllMibs(){
         let allStrings, allPointers = []
 
         if(!isEur&!isDos){
-          [allStrings,allPointers] = getAddressesForMib(buffer,96)
+          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,96)
         }else if(isEur){
-          [allStrings,allPointers] = getAddressesForMib(buffer,88)
+          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,88)
         }else{
-          [allStrings,allPointers] = getAddressesForMib(buffer,152)
+          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,152)
         }
         
         newMibObj.address.lastString = allStrings[allStrings.length-1]
@@ -4527,39 +4527,43 @@ async function openAndProcessAllMibs(){
           path:mibPath
         }
 
-        const [allStrings2,allPointers2] = getAddressesForMib(buffer,48)
+        const [allStrings2,allPointers2] = getAddressesForMib(mibFileBuffer,48)
+        let newAllStrings,newBuffer
+        
+        if(mibFilebufferHeader.equals(Buffer.from('48000000', 'hex'))){
+          [newAllStrings,newBuffer] = tryToOptimizeTheSpaceForMibs(allStrings2,allPointers2,mibFileBuffer)
+        }
 
-        const [newAllStrings,newBuffer] = tryToOptimizeTheSpaceForMibs(allStrings2,allPointers2,buffer)
+        const stringsToUse = newAllStrings || allStrings2;
+        const bufferToWrite = newAllStrings ? newBuffer : mibFileBuffer;
 
-        fs.writeFileSync(`${mibPath}`,newBuffer,{
-          encoding: "binary",
-          flag: "w",
-          mode: 0o666
-        },
-        (err) => {
-          if (err){
-            errorMessageBox.setWindowTitle("Error")
-            errorMessageBox.setText("ERROR! maybe the file is being used?")
-            errorMessageButton.setText("                                                Ok                                              ")
-            errorMessageBox.exec()
-          }
-          else {
-            console.log("File written successfully\n");
-          }
-        })
+        try {
+          fs.writeFileSync(`${mibPath}`, bufferToWrite, {
+            encoding: "binary",
+            flag: "w",
+            mode: 0o666
+          });
+          console.log("File written successfully\n");
+        } catch (err) {
+          errorMessageBox.setWindowTitle("Error");
+          errorMessageBox.setText("ERROR! maybe the file is being used?");
+          errorMessageButton.setText("                                                Ok                                              ");
+          errorMessageBox.exec();
+        }
 
-        newMibObj2.address.lastString = newAllStrings[newAllStrings.length-1]
-        newMibObj2.address.firstString = newAllStrings[0]
+        newMibObj2.address.lastString = stringsToUse[stringsToUse.length-1];
+        newMibObj2.address.firstString = stringsToUse[0];
+
         newMibObj2.address.lastPointer = allPointers2[allPointers2.length-1]
         newMibObj2.address.firstPointer = allPointers2[0]
 
         mibListObjsData.push(newMibObj)
         mibListObjsData.push(newMibObj2)
-      }else if(bufferHeader.equals(Buffer.from('3C000000', 'hex'))||//MHP1 (JP-KR-US-EU)
-      bufferHeader.equals(Buffer.from('4D485032', 'hex'))||//MHP2 (JP-USA-EU)
-      bufferHeader.equals(Buffer.from('4C000000', 'hex'))||//MHP2G (JP-USA-EU)
-      bufferHeader.equals(Buffer.from('94000000', 'hex'))||//MHP3RD (JP-USA-EU)
-      bufferHeader.readUInt32BE(0)>16843009&&buffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex'))){//MHP3RD
+      }else if(mibFilebufferHeader.equals(Buffer.from('3C000000', 'hex'))||//MHP1 (JP-KR-US-EU)
+      mibFilebufferHeader.equals(Buffer.from('4D485032', 'hex'))||//MHP2 (JP-USA-EU)
+      mibFilebufferHeader.equals(Buffer.from('4C000000', 'hex'))||//MHP2G (JP-USA-EU)
+      mibFilebufferHeader.equals(Buffer.from('94000000', 'hex'))||//MHP3RD (JP-USA-EU)
+      mibFilebufferHeader.readUInt32BE(0)>16843009&&mibFileBuffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex'))){//MHP3RD
         
         for(let i =0;i<=6;i++){
           const newMibObj = {
@@ -4574,11 +4578,11 @@ async function openAndProcessAllMibs(){
             path:mibPath
           }
 
-          const mhChecker = buffer.subarray(0, 4)
+          const mhChecker = mibFileBuffer.subarray(0, 4)
 
           const isP1 = mhChecker.equals(Buffer.from('3C000000', 'hex'))
           const isP3NoOffset = mhChecker.equals(Buffer.from('94000000', 'hex'))
-          const isP3 = (mhChecker.readUInt32BE(0)>16843009&&buffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex')))
+          const isP3 = (mhChecker.readUInt32BE(0)>16843009&&mibFileBuffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex')))
 
           let startPosition1
           let startPosition2
@@ -4595,7 +4599,7 @@ async function openAndProcessAllMibs(){
             startPosition1 = 96
           }
 
-          const [allStrings,allPointers] = getAddressesForMib(buffer,startPosition1,offset,i)
+          const [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,startPosition1,offset,i)
           
           newMibObj.address.lastString = allStrings[allStrings.length-1]
           newMibObj.address.firstString = allStrings[0]
@@ -4616,7 +4620,7 @@ async function openAndProcessAllMibs(){
               path:mibPath
             }
           
-            const [allStrings2,allPointers2] = getAddressesForMib(buffer,startPosition2,undefined,i)
+            const [allStrings2,allPointers2] = getAddressesForMib(mibFileBuffer,startPosition2,undefined,i)
       
             newMibObj2.address.lastString = allStrings2[allStrings2.length-1]
             newMibObj2.address.firstString = allStrings2[0]
@@ -4645,10 +4649,10 @@ async function openAndProcessAllMibs(){
             mibListObjsData.push(newMibObj)
           }
         }
-      }else if(bufferHeader.equals(Buffer.from('4F4D4F4D', 'hex'))){//MHTri
+      }else if(mibFilebufferHeader.equals(Buffer.from('4F4D4F4D', 'hex'))){//MHTri
         bigEndian.setEnabled(true)
 
-        const numberOfPPointers = buffer.readUint32BE(4)
+        const numberOfPPointers = mibFileBuffer.readUint32BE(4)
 
         for(let i =1;i<=numberOfPPointers;i++){
           const newMibObj = {
@@ -4663,12 +4667,12 @@ async function openAndProcessAllMibs(){
             path:mibPath
           }
 
-          const firstString = buffer.readUint32BE(8*i)
+          const firstString = mibFileBuffer.readUint32BE(8*i)
           
           let k =0
           let m =0
           while (m<=7){
-            if(buffer[firstString+k]!=0&&buffer[firstString+k+1]===0){
+            if(mibFileBuffer[firstString+k]!=0&&mibFileBuffer[firstString+k+1]===0){
               m++
             }
             k++
@@ -4865,7 +4869,7 @@ aboutDialog.setWindowTitle('About')
 aboutDialog.setInlineStyle(`
 background-color:white;
 `)
-mainMenuAction6.addEventListener("triggered",function (){
+mainMenuAction7.addEventListener("triggered",function (){
   aboutDialog.exec()
 })
 
@@ -4927,7 +4931,7 @@ aboutTextLayout.addWidget(aboutTextLabel)
 aboutTextWidget.setLayout(aboutTextLayout)
 
 const aboutDonateLabel = new QLabel()
-aboutDonateLabel.setText('<a href="https://ko-fi.com/amaillo">Ko-fi</a>' + "  |  Hive wallet: amaillo")
+aboutDonateLabel.setText('<a href="https://ko-fi.com/amaillo">Ko-fi</a>' + '  | <a href="0xe681952e9083726aae7b545e6b4608acdc444226">USDT (BSC)</a> | <a href="TJL2fpkt98ervNimA5dMarWeuLbG2rt1az">USDT (TRX)</a>')
 aboutDonateLabel.setAlignment(132)
 aboutDonateLabel.setOpenExternalLinks(true)
 const aboutDonateLayout = new QBoxLayout(0)
@@ -5888,7 +5892,7 @@ mainMenuAction1.addEventListener('triggered', function () {
 
 })
 
-mainMenuAction7.addEventListener('triggered', function (){
+mainMenuAction8.addEventListener('triggered', function (){
   let exit = new QApplication()
   exit.exit(0)
 })
