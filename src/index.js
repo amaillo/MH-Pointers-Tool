@@ -44,14 +44,14 @@ let currentContent = ""
 let rawStrings = [] //in hex, contains all 00
 let extractedStrings = []
 let selectedFile = ""
-let string1AddressDecimal= ""
-let string2AddressDecimal = ""
-let pointer1AddressDecimal= ""
-let pointer2AddressDecimal = ""
+let string1OffsetDecimal= ""
+let string2OffsetDecimal = ""
+let pointer1OffsetDecimal= ""
+let pointer2OffsetDecimal = ""
 let extractedStringsOLD = ""
 let spaceLeftInSection = 0
-let addressOfEachString = []
-let addressOfEachPointer = []
+let offsetOfEachString = []
+let offsetOfEachPointer = []
 let pointersHexValues = []
 let addressOfEachStringInMemory= []
 let extractedPointersIn4= []
@@ -70,9 +70,9 @@ let extractedTablePointersRaw = []
 let extractedTablePointers = ""
 let extractedTablePointersIn4 = []
 let extractedTablePointersIn4Non0 = []
-let tableStartPointerFileAddresses = []
-let tableEndPointerStartStringFileAddresses = []
-let tableEndStringFileAddresses = []
+let tableStartPointerFileOffsets = []
+let tableEndPointerStartStringFileOffsets = []
+let tableEndStringFileOffsets = []
 let sectionedCurrentContent = []
 let selectedPTFile = ""
 let pointersTableModeON = false
@@ -91,9 +91,9 @@ let originalExtractedStringsLength = 0
 let globalOffset = 0
 let stopCsvInfoGatheringMode = false
 let notCorrectDataSkipThisSection = false
-let postLastStringAddress
+let postLastStringOffset
 let globalExtractedStrings = []
-let globalAddressOfEachString = []
+let globalOffsetOfEachString = []
 let oldcurrentContentLength
 let timer
 let csvTranslationCanceled = false
@@ -104,7 +104,7 @@ function saveItemsInArr(textToSearch){
   matchSearch = []
   let i = 0
   if (textToSearch != ""){
-    for(i=0;i<listWidget.count();++i){
+    for(i = 0;i<listWidget.count();++i){
       stringsArr[i] = listWidget.item(i).text()
     }
   }
@@ -134,14 +134,14 @@ function setNextItem(){
 
       sectionDetailsLabel.setText(`${sectionNameHeader}: String#${listWidget.currentRow()+1}`)
 
-      if(pointer1AddressDecimal!= ""){
-        stringAdressLabel.setText(`String Address: ${addressOfEachString[listWidget.currentRow()]}`+"/"+ "0x" + `${addressOfEachStringInMemory[listWidget.currentRow()].toString(16).toUpperCase().replaceAll("00","")}`)
+      if(pointer1OffsetDecimal!= ""){
+        stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`+"/"+ "0x" + `${addressOfEachStringInMemory[listWidget.currentRow()].toString(16).toUpperCase().replaceAll("00","")}`)
 
       }else{
-        stringAdressLabel.setText(`String Address: ${addressOfEachString[listWidget.currentRow()]}`)
+        stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`)
       }
 
-      if(pointer1AddressDecimal!= ""){
+      if(pointer1OffsetDecimal!= ""){
         pointerValuesLabel.setText(`Pointer HexValues: ${pointersHexValues[listWidget.currentRow()].toString(16).toUpperCase()}`)
 
       }
@@ -207,31 +207,31 @@ function start(){
 }
 
 //Uses only 1-6 Hex characters with a usable offset.
-//Makes visible all the hidden options and then uses the given addresses by the user to
+//Makes visible all the hidden options and then uses the given offsets by the user to
 //get the pointers (extractedPointers), add them as items in the pointers viewer and save them for later, 
 //then does the same for the text in the file (extractedStrings), add those to the listWidget and also
 //transform the encoded text to UTF8. Additionally saves a copy of extractedStrings to use it as reference to know
 //the amount of space that never must be surpassed.
 function saveAndPrepare(doASave) {
 
-  if (!validateHexAddresses() || !fs.existsSync(selectedFile)) {
+  if (!validateHexOffsets() || !fs.existsSync(selectedFile)) {
     handleValidationError();
     return;
   }
 
-  const pointer1Addr = firstPointerAddressLineEdit.text();
-  const pointer2Addr = lastPointerAddressLineEdit.text();
-  pointer1AddressDecimal = parseInt(pointer1Addr, 16);
-  pointer2AddressDecimal = parseInt(pointer2Addr, 16);
+  const pointer1Addr = firstPointerOffsetLineEdit.text();
+  const pointer2Addr = lastPointerOffsetLineEdit.text();
+  pointer1OffsetDecimal = parseInt(pointer1Addr, 16);
+  pointer2OffsetDecimal = parseInt(pointer2Addr, 16);
 
-  if (!validatePointerAddresses()) return;
+  if (!validatePointerOffsets()) return;
 
-  const string1Addr = firstStringAddressLineEdit.text();
-  const string2Addr = lastStringAddressLineEdit.text();
-  string1AddressDecimal = parseInt(string1Addr, 16);
-  string2AddressDecimal = parseInt(string2Addr, 16);
+  const string1Addr = firstStringOffsetLineEdit.text();
+  const string2Addr = lastStringOffsetLineEdit.text();
+  string1OffsetDecimal = parseInt(string1Addr, 16);
+  string2OffsetDecimal = parseInt(string2Addr, 16);
 
-  if (!validateStringAddresses()) return;
+  if (!validateStringOffsets()) return;
 
   setDefaultValues(1);
   enablePointerControls(true);
@@ -246,17 +246,17 @@ function saveAndPrepare(doASave) {
 
 //Similar to saveAndPrepare but only is used when no pointers are given
 function saveAndPreparePointerless(doASave) {
-  if (!validateHexAddresses(false) || !fs.existsSync(selectedFile)) {
+  if (!validateHexOffsets(false) || !fs.existsSync(selectedFile)) {
     handleValidationError();
     return;
   }
 
-  const string1Addr = firstStringAddressLineEdit.text();
-  const string2Addr = lastStringAddressLineEdit.text();
-  string1AddressDecimal = parseInt(string1Addr, 16);
-  string2AddressDecimal = parseInt(string2Addr, 16);
+  const string1Addr = firstStringOffsetLineEdit.text();
+  const string2Addr = lastStringOffsetLineEdit.text();
+  string1OffsetDecimal = parseInt(string1Addr, 16);
+  string2OffsetDecimal = parseInt(string2Addr, 16);
 
-  if (!validateStringAddresses()) return;
+  if (!validateStringOffsets()) return;
 
   setDefaultValues(2);
   enablePointerControls(false);
@@ -283,49 +283,49 @@ function handleValidationError(checkPointers = true) {
 }
 
 //Check if the hex format is correct with regex
-function validateHexAddresses(checkPointers = true) {
+function validateHexOffsets(checkPointers = true) {
   const hexRegex = /^[0-9A-F]{1,6}$/i;
   const validations = [
-    firstStringAddressLineEdit.text().match(hexRegex),
-    lastStringAddressLineEdit.text().match(hexRegex),
-    checkPointers ? firstPointerAddressLineEdit.text().match(hexRegex) : true,
-    checkPointers ? lastPointerAddressLineEdit.text().match(hexRegex) : true
+    firstStringOffsetLineEdit.text().match(hexRegex),
+    lastStringOffsetLineEdit.text().match(hexRegex),
+    checkPointers ? firstPointerOffsetLineEdit.text().match(hexRegex) : true,
+    checkPointers ? lastPointerOffsetLineEdit.text().match(hexRegex) : true
   ];
   return validations.every(Boolean);
 }
 
-//Check if the pointers addresses are ok
-function validatePointerAddresses() {
-  if (pointer1AddressDecimal > currentContent.length || 
-    pointer2AddressDecimal > currentContent.length) {
-    return handleAddressError("At least one pointer address is too big for this file x_x");
+//Check if the pointer offsets are ok
+function validatePointerOffsets() {
+  if (pointer1OffsetDecimal > currentContent.length || 
+    pointer2OffsetDecimal > currentContent.length) {
+    return handleOffsetsError("At least one pointer offset is too big for this file x_x");
   }
-  if (pointer2AddressDecimal <= pointer1AddressDecimal) {
-    const msg = pointer2AddressDecimal === pointer1AddressDecimal ?
-      "Invalid pointer addresses, same addresses" :
-      "Invalid pointers scheme, the last pointer address\nis greater than the first one";
-    return handleAddressError(msg);
-  }
-  return true;
-}
-
-//Check if the strings addresses are ok
-function validateStringAddresses() {
-  if (string1AddressDecimal > currentContent.length || 
-    string2AddressDecimal > currentContent.length) {
-    return handleAddressError("At least one string address is too big for this file x_x");
-  }
-  if (string2AddressDecimal <= string1AddressDecimal) {
-    const msg = string2AddressDecimal === string1AddressDecimal ?
-      "Invalid string addresses, same addresses" :
-      "Invalid string scheme, the last string address\nis greater than the first one";
-    return handleAddressError(msg);
+  if (pointer2OffsetDecimal <= pointer1OffsetDecimal) {
+    const msg = pointer2OffsetDecimal === pointer1OffsetDecimal ?
+      "Invalid pointer offsets, same offsets" :
+      "Invalid pointers scheme, the last pointer offset\nis greater than the first one";
+    return handleOffsetsError(msg);
   }
   return true;
 }
 
-//Handles validation error when address is not correct
-function handleAddressError(message) {
+//Check if the string offsets are ok
+function validateStringOffsets() {
+  if (string1OffsetDecimal > currentContent.length || 
+    string2OffsetDecimal > currentContent.length) {
+    return handleOffsetsError("At least one string offset is too big for this file x_x");
+  }
+  if (string2OffsetDecimal <= string1OffsetDecimal) {
+    const msg = string2OffsetDecimal === string1OffsetDecimal ?
+      "Invalid string offsets, same offsets" :
+      "Invalid string scheme, the last string offset\nis greater than the first one";
+    return handleOffsetsError(msg);
+  }
+  return true;
+}
+
+//Handles validation error when offset is not correct
+function handleOffsetsError(message) {
   if (csvInfoGatheringMode === false) {
     errorMessageBox.setWindowTitle("Error");
     errorMessageBox.setText(message);
@@ -338,9 +338,9 @@ function handleAddressError(message) {
   return false;
 }
 
-// Get pointers using the given addresses, separate them into groups of 4 bytes, and add them to the viewer
+// Get pointers using the given offsets, separate them into groups of 4 bytes, and add them to the viewer
 function processPointers() {
-  extractedPointers = currentContent.slice(pointer1AddressDecimal, pointer2AddressDecimal);
+  extractedPointers = currentContent.slice(pointer1OffsetDecimal, pointer2OffsetDecimal);
   pointersViewerFull.clear();
   hiddenPointers = 0;
   let nonZeroIndex = 0;
@@ -367,11 +367,11 @@ function processPointers() {
   pointersViewerTitleLabel.setText(`Pointers Viewer (${extractedPointersIn4.length-hiddenPointers}) (${quantityOfSharedPointers})`);
 }
 
-//Extracts null-terminated strings between the specified addresses,
+//Extracts null-terminated strings between the specified offsets,
 //parses them (handling consecutive nulls), converts encoding if needed,
 //and displays them in the string list widget.
 function processStrings() {
-  extractedStrings = currentContent.slice(string1AddressDecimal, string2AddressDecimal);
+  extractedStrings = currentContent.slice(string1OffsetDecimal, string2OffsetDecimal);
   let tempStrings = extractedStrings;
   rawStrings = [];
   let i = 0;
@@ -416,12 +416,12 @@ function processStrings() {
 //and either updates pointer table or saves configuration.
 function executeFinalFunctions(doASave, isPointerless = false) {
   if(!isPointerless) {
-    stringAddressFunc(currentContent);
-    pointerAddressFunc();
+    stringOffsetFunc(currentContent);
+    pointerOffsetFunc();
     hexValuesFunc();
     pointerAdjuster(currentContent);
   }else{
-    stringAddressFuncWithoutPointers(currentContent, string1AddressDecimal, string2AddressDecimal);
+    stringOffsetFuncWithoutPointers(currentContent, string1OffsetDecimal, string2OffsetDecimal);
   }
   
   spaceLeftFunc(extractedStrings);
@@ -450,32 +450,32 @@ function enablePointerControls(enable) {
   pointersViewerSpecific.setEnabled(enable);
 }
 
-//Gather all the info to know the offset of each string in the file and in the memory 
+//Gather all the info to know the offset of each string in the file and their address in the memory 
 //(the memory one is accurate only if the console uses pointers based in the total lenght of data in the RAM)
 //data = currentContent, basically, the file.
-function stringAddressFunc(data) {
+function stringOffsetFunc(data) {
 
-  let i = string1AddressDecimal;
+  let i = string1OffsetDecimal;
   let phase = data[i] !== 0 ? 1 : 0;
   let k = 0;
   let firstLetterFound = phase === 1;
-  const endAddress = string2AddressDecimal;
+  const endOffset = string2OffsetDecimal;
 
-  addressOfEachString.length = 0;
+  offsetOfEachString.length = 0;
   
-  while (i < endAddress) {
+  while (i < endOffset) {
     const currentByte = data[i];
     const isNull = currentByte === 0;
 
     if (!isNull && phase === 1) {
-      addressOfEachString[k++] = i.toString(16).toUpperCase();
+      offsetOfEachString[k++] = i.toString(16).toUpperCase();
       phase = 2;
     } 
     else if (isNull && phase === 2) {
       phase = 1;
     }
     else if (isNull && phase === 0 && pointersTableModeON) {
-      addressOfEachString[k++] = i.toString(16).toUpperCase();
+      offsetOfEachString[k++] = i.toString(16).toUpperCase();
       if (!firstLetterFound && data[i + 1] !== 0) {
         phase = 1;
         firstLetterFound = true;
@@ -502,13 +502,13 @@ function stringAddressFunc(data) {
   
   oldPointersHexValues = [...pointersHexValues];
 
-  const firstAddr = parseInt(addressOfEachString[0], 16);
+  const firstAddr = parseInt(offsetOfEachString[0], 16);
   const refHex = extractedPointersIn4[0].toString("hex");
   const refLength = refHex.length;
   const padInfo = getPaddingInfo(refHex);
 
-  for (let idx = 1; idx < addressOfEachString.length; idx++) {
-    const diff = parseInt(addressOfEachString[idx], 16) - firstAddr;
+  for (let idx = 1; idx < offsetOfEachString.length; idx++) {
+    const diff = parseInt(offsetOfEachString[idx], 16) - firstAddr;
     let newHex = (firstPointerVal + diff).toString(16);
 
     if (!isBE) {
@@ -552,21 +552,21 @@ function applyPadding(hex, targetLen, { left, right }) {
   return hex;
 }
 
-//Similar to stringAddressFunc()
-function stringAddressFuncWithoutPointers(data,start,end){
+//Similar to stringOffsetFunc()
+function stringOffsetFuncWithoutPointers(data,start,end){
   let i = start;
 
   let phase = 0;
   let k = 0;
-  addressOfEachString = []
+  offsetOfEachString = []
 
   //Analyze all the string indexes from currentContent
-  //Saves the address/string index of each string start
+  //Saves the offset/string index of each string start
   while(i != end){
 
     if(data[i] != 0 && phase === 0){
 
-      addressOfEachString[k] = i.toString(16).toUpperCase();
+      offsetOfEachString[k] = i.toString(16).toUpperCase();
       k=k+1;
       phase= 1;
       
@@ -576,7 +576,7 @@ function stringAddressFuncWithoutPointers(data,start,end){
     }
     i=i+1;
   }
-  return addressOfEachString
+  return offsetOfEachString
 }
 
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
@@ -595,12 +595,12 @@ function spaceLeftFunc(data){
       i=i+1
     }
 
-    spaceLeftInSection = spaceLeftInSection -addressOfEachString.length
+    spaceLeftInSection = spaceLeftInSection -offsetOfEachString.length
     spaceLeftLabel.setText(`Space left: ${spaceLeftInSection+1}`)
   }else if(pointersTableModeON===true){
     let k = 0;
     while(globalExtractedStrings[k]!=undefined){
-      i=0
+      i = 0
       while(globalExtractedStrings[k][i] != undefined){
   
         if(globalExtractedStrings[k][i] === 0){
@@ -610,24 +610,24 @@ function spaceLeftFunc(data){
       }
       k=k+1;
     }
-    i=0
-    while(globalAddressOfEachString[i]!=undefined){
-      spaceLeftInSection = spaceLeftInSection -globalAddressOfEachString[i].length
+    i = 0
+    while(globalOffsetOfEachString[i]!=undefined){
+      spaceLeftInSection = spaceLeftInSection -globalOffsetOfEachString[i].length
       i=i+1
     }
     spaceLeftLabel.setText(`Global Space Left: ${spaceLeftInSection+1}`)
   }
 }
 
-//Saves the address of each pointer to be used later.
-function pointerAddressFunc(){
+//Saves the offset of each pointer to be used later.
+function pointerOffsetFunc(){
 
-  let i = pointer1AddressDecimal;
+  let i = pointer1OffsetDecimal;
   let k = 0;
 
-  while(i < pointer2AddressDecimal){
+  while(i < pointer2OffsetDecimal){
 
-    addressOfEachPointer[k]= i
+    offsetOfEachPointer[k]= i
     k=k+1
     i=i+4;
   }
@@ -679,7 +679,7 @@ function pointerAdjuster(data){
   let tempCurrentContent = data.toString("binary")
   let tempExtractedPointers = extractedPointers.toString("binary")
 
-  tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,pointer1OffsetDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2OffsetDecimal)
   currentContent = Buffer.from(tempCurrentContent, "binary")
   i = 0;
   while(extractedPointersIn4[i] != undefined){
@@ -726,7 +726,7 @@ function saveProgress(isCSVTranslation,replacement){
   let newBuffer = Buffer.alloc(1)
   savedString = Buffer.concat([savedString,newBuffer])
 
-  if(pointer1AddressDecimal=== ""){
+  if(pointer1OffsetDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>savedString.length){
 
       savedString = Buffer.concat([savedString,newBuffer])
@@ -740,7 +740,7 @@ function saveProgress(isCSVTranslation,replacement){
     }
   }
 
-  if(pointer1AddressDecimal=== ""){
+  if(pointer1OffsetDecimal=== ""){
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
   
@@ -754,7 +754,7 @@ function saveProgress(isCSVTranslation,replacement){
   }
 
 
-  if(pointer1AddressDecimal=== ""){
+  if(pointer1OffsetDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>oldRawString.length){
       
       rawStrings[listWidget.currentRow()] = rawStrings[listWidget.currentRow()].slice(0,-1)
@@ -791,9 +791,9 @@ function saveProgress(isCSVTranslation,replacement){
 
   let tempCurrentContent = currentContent.toString("binary")
   let tempExtractedStrings = extractedStrings.toString("binary")
-  string2AddressDecimal= parseInt(lastStringAddressLineEdit.text(),16)
+  string2OffsetDecimal= parseInt(lastStringOffsetLineEdit.text(),16)
 
-  tempCurrentContent = tempCurrentContent.substring(0,string1AddressDecimal) + tempExtractedStrings  + tempCurrentContent.substring(string2AddressDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,string1OffsetDecimal) + tempExtractedStrings  + tempCurrentContent.substring(string2OffsetDecimal)
 
   oldcurrentContentLength = currentContent.length
   currentContent = Buffer.from(tempCurrentContent, "binary")
@@ -801,21 +801,21 @@ function saveProgress(isCSVTranslation,replacement){
   if(pointersTableModeON===true &&currentContent.length>oldcurrentContentLength&&fileSizeMenuAction1.isChecked()===true){
     let howMuchToCut = currentContent.length-oldcurrentContentLength
     let currentContentBufferArr = []
-    currentContentBufferArr[0] = currentContent.subarray(0,parseInt(postLastStringAddress,16)-1)
+    currentContentBufferArr[0] = currentContent.subarray(0,parseInt(postLastStringOffset,16)-1)
     currentContentBufferArr[1] = newBuffer
-    currentContentBufferArr[2] = currentContent.subarray(parseInt(postLastStringAddress,16)+howMuchToCut)
+    currentContentBufferArr[2] = currentContent.subarray(parseInt(postLastStringOffset,16)+howMuchToCut)
     currentContent = Buffer.concat(currentContentBufferArr)
 
   }
 
-  if(pointer1AddressDecimal=== ""&&pointersTableModeON===false){
+  if(pointer1OffsetDecimal=== ""&&pointersTableModeON===false){
 
   spaceLeftFunc(extractedStrings)
 
   }else{
-    stringAddressFunc(currentContent)
+    stringOffsetFunc(currentContent)
     spaceLeftFunc(extractedStrings)
-    pointerAddressFunc(currentContent)
+    pointerOffsetFunc(currentContent)
     hexValuesFunc(currentContent)
     pointerAdjuster(currentContent)
   }
@@ -854,10 +854,10 @@ function saveConfiguration() {
   const newConfigData = {
     sectionNumber: currentSectionNumber,
     sectionName: sectionNameLineEdit.text(),
-    firstPointerAddress: firstPointerAddressLineEdit.text(),
-    lastPointerAddress: lastPointerAddressLineEdit.text(),
-    firstStringAddress: firstStringAddressLineEdit.text(),
-    lastStringAddress: lastStringAddressLineEdit.text(),
+    firstPointerOffset: firstPointerOffsetLineEdit.text(),
+    lastPointerOffset: lastPointerOffsetLineEdit.text(),
+    firstStringOffset: firstStringOffsetLineEdit.text(),
+    lastStringOffset: lastStringOffsetLineEdit.text(),
     filePath: filePathQLineEditRead.text(),
     encoding: UTF8Encoding ? "UTF8" : "SJIS"
   };
@@ -912,16 +912,16 @@ function saveConfiguration() {
 
 //Resets everything
 //options=1: default reset only
-//options=2: default reset + pointer addresses
+//options=2: default reset + pointer offset
 //options=3: default reset + table mode
-//options=4: default reset + address inputs
+//options=4: default reset + offset inputs
 function setDefaultValues(options){
 
   if (options===1){
 
   }else if(options===2){  
-  pointer1AddressDecimal= ""
-  pointer2AddressDecimal = ""
+  pointer1OffsetDecimal= ""
+  pointer2OffsetDecimal = ""
   }else if(options ===3){
 
     sectionedCurrentContent = []
@@ -929,29 +929,29 @@ function setDefaultValues(options){
     extractedTablePointersRaw = []
     extractedTablePointersIn4 = []
     extractedTablePointersIn4Non0 = []
-    tableStartPointerFileAddresses = []
-    tableEndPointerStartStringFileAddresses = []
-    tableEndStringFileAddresses = []
+    tableStartPointerFileOffsets = []
+    tableEndPointerStartStringFileOffsets = []
+    tableEndStringFileOffsets = []
     pointersTableModeSettingsArr = []
     currentTableContent = []
     organizedSections = []
     oldSelectedTablePointers = []
     sectionNameNumber.setText(1)
   }else if(options===4){
-    firstPointerAddressLineEdit.setText("")
-    lastPointerAddressLineEdit.setText("")
-    firstStringAddressLineEdit.setText("")
-    lastStringAddressLineEdit.setText("")
-    addressOfEachPointer = []
+    firstPointerOffsetLineEdit.setText("")
+    lastPointerOffsetLineEdit.setText("")
+    firstStringOffsetLineEdit.setText("")
+    lastStringOffsetLineEdit.setText("")
+    offsetOfEachPointer = []
   }else{
     sectionNameLineEdit.setText("")
-    firstPointerAddressLineEdit.setText("")
-    lastPointerAddressLineEdit.setText("")
-    firstStringAddressLineEdit.setText("")
-    lastStringAddressLineEdit.setText("")
+    firstPointerOffsetLineEdit.setText("")
+    lastPointerOffsetLineEdit.setText("")
+    firstStringOffsetLineEdit.setText("")
+    lastStringOffsetLineEdit.setText("")
     currentContent = ""
     selectedFile = ""
-    addressOfEachPointer = []
+    offsetOfEachPointer = []
     bigEndian.setCheckState(0)
   }
 
@@ -963,11 +963,11 @@ function setDefaultValues(options){
   match = false
   rawStrings = [] //in hex, contains all 00
   extractedStrings = []
-  // string1AddressDecimal= ""
-  // string2AddressDecimal = ""
+  // string1OffsetDecimal= ""
+  // string2OffsetDecimal = ""
   extractedStringsOLD = ""
   spaceLeftInSection = 0
-  addressOfEachString = []
+  offsetOfEachString = []
   pointersHexValues = []
   addressOfEachStringInMemory= []
   extractedPointersIn4= []
@@ -1011,8 +1011,8 @@ function setDefaultValues(options){
   sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`)
   spaceLeftLabel.setText(`Space left: N/A`)
   pointerValuesLabel.setText(`Pointer HexValues: N/A`)
-  pointerAddressLabel.setText("Pointer Address: N/A")
-  stringAdressLabel.setText(`String Address: File/"RAM" (Not accurate)`)
+  pointerOffsetLabel.setText("Pointer Offset: N/A")
+  stringOffsetLabel.setText(`String Offset: File/"RAM" (Not accurate)`)
   pointersViewerTitleLabel.setText(`Pointers Viewer (Total) (Shared)`)
   choosedCharacters.setText("")
   searchLineEdit.setText("")
@@ -1063,10 +1063,10 @@ function loadConfiguration() {
     }
     setDefaultValues();
     sectionNameLineEdit.setText(sectionConfig.sectionName || "");
-    firstPointerAddressLineEdit.setText(sectionConfig.firstPointerAddress || "");
-    lastPointerAddressLineEdit.setText(sectionConfig.lastPointerAddress || "");
-    firstStringAddressLineEdit.setText(sectionConfig.firstStringAddress || "");
-    lastStringAddressLineEdit.setText(sectionConfig.lastStringAddress || "");
+    firstPointerOffsetLineEdit.setText(sectionConfig.firstPointerOffset || "");
+    lastPointerOffsetLineEdit.setText(sectionConfig.lastPointerOffset || "");
+    firstStringOffsetLineEdit.setText(sectionConfig.firstStringOffset || "");
+    lastStringOffsetLineEdit.setText(sectionConfig.lastStringOffset || "");
     filePathQLineEditRead.setText(sectionConfig.filePath || "");
 
     selectedFile = sectionConfig.filePath || "";
@@ -1302,7 +1302,7 @@ function processSingleSection(selectedCsv, isWordOnlyTranslation) {
 function processAllSections(selectedCsv, isWordOnlyTranslation) {
   let endReached = false;
   csvInfoGatheringMode = true;
-  sectionPaginationPointerFlag = pointer1AddressDecimal ? 2 : 1;
+  sectionPaginationPointerFlag = pointer1OffsetDecimal ? 2 : 1;
 
   goToFirstSection();
 
@@ -1591,7 +1591,7 @@ async function foundAndReplaceIfMatch(replaceStrings, searchStrings, isWordOnlyT
     globalQApplication.processEvents();
   }
 
-  if (!isWordOnlyTranslation && pointer1AddressDecimal !== "" && csvTranslationMode) {
+  if (!isWordOnlyTranslation && pointer1OffsetDecimal !== "" && csvTranslationMode) {
     handlePostTranslation(endReached, true);
   } else if (!isWordOnlyTranslation && csvTranslationMode) {
     handlePostTranslation(endReached, false);
@@ -1766,11 +1766,11 @@ function exportAllSelectionScreen(){
     exportAllSelectionStringsAndMoreButton.setText("All of this section")
 
     exportAllSelectionAllStringsAndMoreButton.setText("All data from sections")
-    if(pointer1AddressDecimal === ""){
+    if(pointer1OffsetDecimal === ""){
 
-      exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings and their Address found in this section\nof the file using this configuration.")
+      exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings and their offsets found in this section\nof the file using this configuration.")
       
-      exportAllSelectionAllStringsAndMoreButton.setToolTip("Exports all the strings and Address found in all sections.\nWarning: Be sure that all the sections are properly set up")
+      exportAllSelectionAllStringsAndMoreButton.setToolTip("Exports all the strings and offsets found in all sections.\nWarning: Be sure that all the sections are properly set up")
     }else{
 
       exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings, Pointers, etc found in this section\nof the file using this configuration.")
@@ -1832,11 +1832,11 @@ function exportAllSelectionScreen(){
   }
 }
 
-//Generates CSV export with UTF-8 BOM, optional section name and addresses
+//Generates CSV export with UTF-8 BOM, optional section name and offsets
 //Splits multi-line strings into separate rows and sanitizes semicolons
-function exportStringsAndAddressOfSection(addFileName, exportAddressToo) {
+function exportStringsAndOffsetOfSection(addFileName, exportOffsetsToo) {
   let dataToExport = [];
-  const header = exportAddressToo? "String;addressOfEachString\n":"String\n"
+  const header = exportOffsetsToo? "String;offsetOfEachString\n":"String\n"
   dataToExport[0] = Buffer.from("efbbbf", "hex") + header
   let i = 0;
   let l = 1;
@@ -1848,7 +1848,7 @@ function exportStringsAndAddressOfSection(addFileName, exportAddressToo) {
 
   while (rawStrings[i] != undefined) {
     const text = checkForBlankSpaces(listWidget.item(i).text());
-    const address = addressOfEachString[i].toString("hex");
+    const offset = offsetOfEachString[i].toString("hex");
     
     const lines = text.includes('\r\n')?text.split('\r\n'):text.split('\n')
     
@@ -1856,7 +1856,7 @@ function exportStringsAndAddressOfSection(addFileName, exportAddressToo) {
       const lineText = checkForSemicolons(lines[j], 0);
       
       if (j === 0) {
-        dataToExport[l] = `${lineText}` + (exportAddressToo ? `;${address}\n` : '\n');
+        dataToExport[l] = `${lineText}` + (exportOffsetsToo ? `;${offset}\n` : '\n');
       } else {
         dataToExport[l] = `${lineText}\n`;
       }
@@ -1921,10 +1921,10 @@ function exportStringsFromAllSections(options, addFileName) {
 //Navigates through all sections (using section pagination) and exports their strings
 //Skips invalid sections, includes section names,
 //Continues until stop flag is set
-function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
+function exportStringsOffsetAndPointersFromAllSections(options, addFileName) {
   let dataToExport = [];
   dataToExport[0] = Buffer.from("efbbbf", "hex") + 
-  "String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n";
+  "String;offsetOfEachString;offsetOfEachStringInMemory;offsetOfEachPointer;PointerHexadecimalValue;FullPointers\n";
   
   let i = 0;
   let l = 1;
@@ -1935,7 +1935,7 @@ function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
   }
   if(mibListObjsData.length === 0) {
 
-    firstPointerAddressLineEdit.text() ?
+    firstPointerOffsetLineEdit.text() ?
     saveAndPrepare(true) :
     saveAndPreparePointerless(true);
   }
@@ -1951,7 +1951,7 @@ function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
     while(rawStrings[i] !== undefined && !notCorrectDataSkipThisSection) {
       const textToSplit = checkForBlankSpaces(listWidget.item(i).text())
       const textLines = textToSplit.includes('\r\n')?textToSplit.split('\r\n'):textToSplit.split('\n')
-      const address = addressOfEachString[i].toString("hex");
+      const offset = offsetOfEachString[i].toString("hex");
 
       
       // Procesar cada línea del string
@@ -1960,12 +1960,12 @@ function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
         
         // Solo mostrar datos de dirección/pointers en la primera línea
         if (j === 0) {
-          line += `${address};`;
+          line += `${offset};`;
           
-          if(firstPointerAddressLineEdit.text()) {
+          if(firstPointerOffsetLineEdit.text()) {
 
             line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`
-            line += `${addressOfEachPointer[i]};`
+            line += `${offsetOfEachPointer[i]};`
             line += `${pointersHexValues[i].toString("hex").toUpperCase()}`
             
             if(rawStrings[i+1] === undefined) {
@@ -2006,7 +2006,7 @@ function exportStringsAddressAndPointersFromAllSections(options, addFileName) {
 }
 
 //Routes export requests to appropriate handler based on export mode
-// Mode 0: full data (strings, addresses, pointers)
+// Mode 0: full data (strings, offsets, pointers)
 // Mode 1: strings only
 // Mode 2: All PTs strings only (delegates to handleMultiPTExport)
 // Mode 3: All PTs full data (delegates to handleMultiPTExport)
@@ -2015,7 +2015,7 @@ function handlePointersTableExport(exportOptionNumber, addFileName) {
   let dataToExport = [];
   dataToExport[0] = Buffer.from("efbbbf", "hex")+ 
   (exportOptionNumber?"String\n"
-  :"String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n");
+  :"String;offsetOfEachString;offsetOfEachStringInMemory;offsetOfEachPointer;PointerHexadecimalValue;FullPointers\n");
 
   let i = 0;
   let l = 1;
@@ -2042,9 +2042,9 @@ function handlePointersTableExport(exportOptionNumber, addFileName) {
 
           line = `${checkForSemicolons(textLines[j], 0)};`;
           if(j===0){
-            line += `${addressOfEachString[i].toString("hex")};`;
+            line += `${offsetOfEachString[i].toString("hex")};`;
             line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`;
-            line += `${addressOfEachPointer[i]};`;
+            line += `${offsetOfEachPointer[i]};`;
             line += `${pointersHexValues[i].toString("hex").toUpperCase()}`;
 
             if (rawStrings[i + 1] === undefined) {
@@ -2120,8 +2120,8 @@ async function handleMultiPTExport(addFileName, includePointers) {
     loadPointersTable(selectedPTFile);
 
     dataToExport[0] = Buffer.from("efbbbf", "hex") + 
-    (includePointers 
-    ? "String;addressOfEachString;addressOfEachStringInMemory;AddressOfEachPointer;PointerHexadecimalValue;FullPointers\n"
+    (includePointers
+    ? "String;offsetOfEachString;offsetOfEachStringInMemory;offsetOfEachPointer;PointerHexadecimalValue;FullPointers\n"
     : "String\n");
 
     let l = 1;
@@ -2143,9 +2143,9 @@ async function handleMultiPTExport(addFileName, includePointers) {
           let line = `${checkForSemicolons(textLines[j], 0)}`;
           
           if (j === 0 && includePointers) {
-            line += `;${addressOfEachString[i].toString("hex")}`;
+            line += `;${offsetOfEachString[i].toString("hex")}`;
             line += `;${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")}`;
-            line += `;${addressOfEachPointer[i]}`;
+            line += `;${offsetOfEachPointer[i]}`;
             line += `;${pointersHexValues[i].toString("hex").toUpperCase()}`;
 
             if (i === rawStrings.length - 1) {
@@ -2200,7 +2200,7 @@ async function getPTFilesList() {
 //Check if the given string has semilcolons, if found one, add "" to the line where is the semicolon.
 //Additionally, also search for + and - at the start of a line, if found one, add a space at the start of the line.
 function checkForSemicolons(listWidgetString,style){
-  let i =0
+  let i = 0
   if(listWidgetString.includes(";")===true){
 
     if(style===0){
@@ -2226,7 +2226,7 @@ function checkForSemicolons(listWidgetString,style){
 
   if(listWidgetString.includes("-")===true||listWidgetString.includes("+")===true){
 
-    i =0
+    i = 0
 
     if(style===0){
       listWidgetString = listWidgetString.split("\n")
@@ -2285,34 +2285,34 @@ async function exportToCSVManager(exportOptionNumber,addFileName){
   let exportedDataFinal = []
   if(!pointersTableModeON){
 
-    if(pointer1AddressDecimal === ""){
+    if(pointer1OffsetDecimal === ""){
 
-      //Address and strings in this section
+      //Offset and strings in this section
       if(exportOptionNumber===0){
-        exportedData = exportStringsAndAddressOfSection(addFileName,true)
+        exportedData = exportStringsAndOffsetOfSection(addFileName,true)
 
       //Only Strings in this section
       }else if(exportOptionNumber===1){
-        exportedData = exportStringsAndAddressOfSection(addFileName,false)
+        exportedData = exportStringsAndOffsetOfSection(addFileName,false)
   
       //Strings from all sections
       }else if(exportOptionNumber===2){
         exportedData = exportStringsFromAllSections(exportOptionNumber,addFileName)
       
-      //Strings and address from all sections
+      //Strings and offset from all sections
       }else if(exportOptionNumber===3){
         sectionPaginationPointerFlag = 1
-        exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
+        exportedData = exportStringsOffsetAndPointersFromAllSections(exportOptionNumber,addFileName)
       }
 
-    }else if (pointer1AddressDecimal != ""){
+    }else if (pointer1OffsetDecimal != ""){
       //Export all of this section
       if(exportOptionNumber===0){
-      exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
+      exportedData = exportStringsOffsetAndPointersFromAllSections(exportOptionNumber,addFileName)
       
       //Export strings of this section
       }else if(exportOptionNumber===1){
-        exportedData = exportStringsAndAddressOfSection(addFileName,false)
+        exportedData = exportStringsAndOffsetOfSection(addFileName,false)
 
       //Export strings of all sections
       }else if(exportOptionNumber===2){
@@ -2321,7 +2321,7 @@ async function exportToCSVManager(exportOptionNumber,addFileName){
       //Export all of all sections
       }else if(exportOptionNumber===3){
         sectionPaginationPointerFlag = 2
-        exportedData = exportStringsAddressAndPointersFromAllSections(exportOptionNumber,addFileName)
+        exportedData = exportStringsOffsetAndPointersFromAllSections(exportOptionNumber,addFileName)
       }
     }
   }else if (pointersTableModeON) {
@@ -2391,7 +2391,7 @@ async function exportToCSVManager(exportOptionNumber,addFileName){
 
 //Depending of if Hide 0's from viewer is checked this function hide the 0's or not.
 function hideShow(){
-  let i =0;
+  let i = 0;
   hiddenPointers = 0;
   while(extractedPointersIn4[i]!= undefined){
     
@@ -2413,8 +2413,8 @@ function hideShow(){
 //pointers viewer, if found a match, is selected.
 function highlightPointers(relocateMode = false){
   
-  if(pointer1AddressDecimal!= ""){
-    let i =0;
+  if(pointer1OffsetDecimal!= ""){
+    let i = 0;
     quantityOfSharedPointers=1
 
     while(extractedPointersIn4[i] != undefined){ //Search strings
@@ -2434,7 +2434,7 @@ function highlightPointers(relocateMode = false){
         pointersEditor.clear()
         pointersEditorLabel.setText("#n")
         errorMessageBox.setWindowTitle("Error")
-        errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\nare you sure that both pointer addresses are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
+        errorMessageBox.setText(`Oh no, the string #${listWidget.currentRow()+1} has 0 pointers associated with it\nare you sure that both pointer offsets are correct?\nIf that is the case may the pointers of this string are\nin another place or the pointers are in Big Endian.`)
         errorMessageButton.setText("                                                Ok                                              ")
         errorMessageBox.exec()
         return false
@@ -2472,13 +2472,13 @@ function saveCurrentContent(){
 function currentStringSelectedData(){
   if(listWidget.currentRow()===-1||pointersViewerFull.currentRow()===-1) return
 
-  const currentStringPositionInFile = parseInt(addressOfEachString[listWidget.currentRow()],16)
+  const currentStringPositionInFile = parseInt(offsetOfEachString[listWidget.currentRow()],16)
   
   let i = 0
-  for(i =0;currentContent[currentStringPositionInFile+i]!==0;++i){}
+  for(i = 0;currentContent[currentStringPositionInFile+i]!==0;++i){}
 
   const outputText = Buffer.from(currentContent.subarray(currentStringPositionInFile,currentStringPositionInFile+i))
-  const pointerPositionInFile = addressOfEachPointer[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]]
+  const pointerPositionInFile = offsetOfEachPointer[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]]
   
 
   return {text:outputText,stringPosition:currentStringPositionInFile,pointerPosition:pointerPositionInFile}
@@ -2536,7 +2536,7 @@ function relocateStringPosition(newStringPositionInFile,listWitgetPointerText){
 
     //Put 0's in the current String place
     if(pointersViewerSpecific.count()===1){
-      for(let i =0;currentContent[currentStringData.stringPosition+i]!==0;++i){
+      for(let i = 0;currentContent[currentStringData.stringPosition+i]!==0;++i){
         currentContent[currentStringData.stringPosition+i]=0
       }
     }
@@ -2647,19 +2647,19 @@ function relocateToNewString(){
 
   //Creates a new string and make the selected pointer point to it
   }else if (pointersViewerSpecific.currentItem().text()===pointersEditor.text()){
-    let i =0;
-    let newStringAddressDecimal =""
-    while(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i] !="00"){
+    let i = 0;
+    let newStringOffsetDecimal =""
+    while(currentContent[parseInt(offsetOfEachString[offsetOfEachString.length-1],16)+i] !="00"){
 
-      if(currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+1] ===0 && currentContent[parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2] ===0){
+      if(currentContent[parseInt(offsetOfEachString[offsetOfEachString.length-1],16)+i+1] ===0 && currentContent[parseInt(offsetOfEachString[offsetOfEachString.length-1],16)+i+2] ===0){
 
-        newStringAddressDecimal = (parseInt(addressOfEachString[addressOfEachString.length-1],16)+i+2).toString(16).toUpperCase()
+        newStringOffsetDecimal = (parseInt(offsetOfEachString[offsetOfEachString.length-1],16)+i+2).toString(16).toUpperCase()
         break
       }
       i=i+1;
     }
 
-    currentContent[parseInt(newStringAddressDecimal,16)] = 32
+    currentContent[parseInt(newStringOffsetDecimal,16)] = 32
 
     let firstPointerW = pointersViewerFull.item(0).text()
 
@@ -2678,7 +2678,7 @@ function relocateToNewString(){
       k=k+1;
     }
 
-    let differenceInDecimals = parseInt(newStringAddressDecimal,16)-parseInt(addressOfEachString[0],16)
+    let differenceInDecimals = parseInt(newStringOffsetDecimal,16)-parseInt(offsetOfEachString[0],16)
     let nextPointerInDecimals = firstPointerValuesInDecimals+differenceInDecimals;
     let newPointerHexValues
 
@@ -2693,7 +2693,7 @@ function relocateToNewString(){
     if(newPointerHexValues.length<extractedPointersIn4[0].toString("hex").length
     &&extractedPointersIn4[i]!= undefined){
 
-      while(k<Math.trunc(newStringAddressDecimal.toString(16).length/2)){
+      while(k<Math.trunc(newStringOffsetDecimal.toString(16).length/2)){
         let left = false
         let right = false
     
@@ -2771,7 +2771,7 @@ function saveEditedPointer(){
   let tempCurrentContent = currentContent.toString("binary")
   let tempExtractedPointers = extractedPointers.toString("binary")
 
-  tempCurrentContent = tempCurrentContent.substring(0,pointer1AddressDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2AddressDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,pointer1OffsetDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2OffsetDecimal)
   currentContent = Buffer.from(tempCurrentContent, "binary")
   pointersViewerFull.removeItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]))
 
@@ -2864,59 +2864,59 @@ function getPointersTableData(){
 
   pointersTableSectionNameLineEdit.setText(ptFileName)
   
-  //Pointers Table Addresses--------------------------------------------------------
+  //Pointers Table Offsets--------------------------------------------------------
 
-  const firstPointerTableAddressLineEdit = new QLineEdit();
-  const lastPointerTableAddressLineEdit = new QLineEdit();
-  firstPointerTableAddressLineEdit.setToolTip("1° Pointers Table Index pointer address in the file (without 0x). Usually is 0.")
-  firstPointerTableAddressLineEdit.setPlaceholderText("First pointer address")
-  lastPointerTableAddressLineEdit.setPlaceholderText("Post-last pointer address")
-  lastPointerTableAddressLineEdit.setToolTip("Post-last Pointers Table Index pointer address in the file (without 0x).\nUsually is the starting address of FFFFFFFFFFFFFFFF")
-  lastPointerTableAddressLineEdit.setInlineStyle(`
+  const firstPointerTableOffsetLineEdit = new QLineEdit();
+  const lastPointerTableOffsetLineEdit = new QLineEdit();
+  firstPointerTableOffsetLineEdit.setToolTip("1° Pointers Table Index pointer offset in the file (without 0x). Usually is 0.")
+  firstPointerTableOffsetLineEdit.setPlaceholderText("First pointer offset")
+  lastPointerTableOffsetLineEdit.setPlaceholderText("Post-last pointer offset")
+  lastPointerTableOffsetLineEdit.setToolTip("Post-last Pointers Table Index pointer offset in the file (without 0x).\nUsually is the starting offset of FFFFFFFFFFFFFFFF")
+  lastPointerTableOffsetLineEdit.setInlineStyle(`
   width:118px;
   font-size:11px;
   `)
-  firstPointerTableAddressLineEdit.setInlineStyle(`
+  firstPointerTableOffsetLineEdit.setInlineStyle(`
   width:119px;
   font-size:11px;
   `)
-  const pointerTableAddressWidget = new QWidget()
-  const pointerTableAddressTitleWidget = new QWidget()
-  const pointerTableAddressLineEditWidget = new QWidget()
+  const pointerTableOffsetWidget = new QWidget()
+  const pointerTableOffsetTitleWidget = new QWidget()
+  const pointerTableOffsetLineEditWidget = new QWidget()
 
-  createPointersDialogLayout.addWidget(pointerTableAddressWidget)
+  createPointersDialogLayout.addWidget(pointerTableOffsetWidget)
 
-  const pointerTableAddressWidgetLayout = new FlexLayout()
-  const pointerTableAddressTitleWidgetLayout = new FlexLayout()
-  const pointerTableAddressLineEditWidgetLayout = new FlexLayout()
+  const pointerTableOffsetWidgetLayout = new FlexLayout()
+  const pointerTableOffsetTitleWidgetLayout = new FlexLayout()
+  const pointerTableOffsetLineEditWidgetLayout = new FlexLayout()
 
-  pointerTableAddressTitleWidget.setInlineStyle(`
+  pointerTableOffsetTitleWidget.setInlineStyle(`
   flex-direction:row;
 
   `)
-  pointerTableAddressLineEditWidget.setInlineStyle(`
+  pointerTableOffsetLineEditWidget.setInlineStyle(`
   flex-direction:row;
   `)
 
-  pointerTableAddressWidget.setLayout(pointerTableAddressWidgetLayout)
-  pointerTableAddressTitleWidget.setLayout(pointerTableAddressTitleWidgetLayout)
-  pointerTableAddressLineEditWidget.setLayout(pointerTableAddressLineEditWidgetLayout)
+  pointerTableOffsetWidget.setLayout(pointerTableOffsetWidgetLayout)
+  pointerTableOffsetTitleWidget.setLayout(pointerTableOffsetTitleWidgetLayout)
+  pointerTableOffsetLineEditWidget.setLayout(pointerTableOffsetLineEditWidgetLayout)
 
-  const pointerTableAddressLineEditTitle = new QLabel();
-  pointerTableAddressLineEditTitle.setText("Pointers Table Index *")
-  pointerTableAddressLineEditTitle.setAlignment(132)
-  pointerTableAddressLineEditTitle.setInlineStyle(`
+  const pointerTableOffsetLineEditTitle = new QLabel();
+  pointerTableOffsetLineEditTitle.setText("Pointers Table Index *")
+  pointerTableOffsetLineEditTitle.setAlignment(132)
+  pointerTableOffsetLineEditTitle.setInlineStyle(`
   width:238px;
   border-color:black;
   border-style:solid;
   border-bottom-width:1px;
   `)
 
-  pointerTableAddressLineEditWidgetLayout.addWidget(firstPointerTableAddressLineEdit)
-  pointerTableAddressLineEditWidgetLayout.addWidget(lastPointerTableAddressLineEdit)
+  pointerTableOffsetLineEditWidgetLayout.addWidget(firstPointerTableOffsetLineEdit)
+  pointerTableOffsetLineEditWidgetLayout.addWidget(lastPointerTableOffsetLineEdit)
 
-  pointerTableAddressWidgetLayout.addWidget(pointerTableAddressLineEditTitle)
-  pointerTableAddressWidgetLayout.addWidget(pointerTableAddressLineEditWidget)
+  pointerTableOffsetWidgetLayout.addWidget(pointerTableOffsetLineEditTitle)
+  pointerTableOffsetWidgetLayout.addWidget(pointerTableOffsetLineEditWidget)
 
   //Global offset--------------------------------------------------------
 
@@ -2972,7 +2972,7 @@ function getPointersTableData(){
   })
 
 
-  //First Pointer of the first Table Address--------------------------------------------------------
+  //First Pointer of the first Table Offset--------------------------------------------------------
 
   const firstPointerTitle = new QWidget();
 
@@ -2981,7 +2981,7 @@ function getPointersTableData(){
   // createPointersDialogLayout.addWidget(firstPointerTitle)
 
   const firstPointerTitleLabel = new QLabel()
-  firstPointerTitleLabel.setText("1° Pointer address of the 1° Pointers Table *")
+  firstPointerTitleLabel.setText("1° Pointer offset of the 1° Pointers Table *")
   firstPointerTitleLabel.setAlignment(132)
   firstPointerTitleLabel.setInlineStyle(`
   width:238px;
@@ -2992,19 +2992,19 @@ function getPointersTableData(){
 
   firstPointerTitleLayout.addWidget(firstPointerTitleLabel)
 
-  const firstPointerAddressLineEdit2 = new QLineEdit();
-  firstPointerAddressLineEdit2.setPlaceholderText("1° Pointer of the 1° Pointers Table")
-  firstPointerAddressLineEdit2.setToolTip("First pointer address for the first Pointers Table (without 0x).\nIt will be found using the Pointers Table Index.")
-  firstPointerAddressLineEdit2.setEnabled(false)
-  firstPointerAddressLineEdit2.setInlineStyle(`
+  const firstPointerOffsetLineEdit2 = new QLineEdit();
+  firstPointerOffsetLineEdit2.setPlaceholderText("1° Pointer of the 1° Pointers Table")
+  firstPointerOffsetLineEdit2.setToolTip("First pointer offset for the first Pointers Table (without 0x).\nIt will be found using the Pointers Table Index.")
+  firstPointerOffsetLineEdit2.setEnabled(false)
+  firstPointerOffsetLineEdit2.setInlineStyle(`
   width:238px;
   font-size:11px;
   `)
 
-  firstPointerTitleLayout.addWidget(firstPointerAddressLineEdit2)
-  firstPointerTableAddressLineEdit.setText("0")
+  firstPointerTitleLayout.addWidget(firstPointerOffsetLineEdit2)
+  firstPointerTableOffsetLineEdit.setText("0")
 
-  //First String of the first Table Address--------------------------------------------------------
+  //First String of the first Table Offset--------------------------------------------------------
 
   const firstStringTitle = new QWidget();
 
@@ -3013,7 +3013,7 @@ function getPointersTableData(){
   // createPointersDialogLayout.addWidget(firstStringTitle)
 
   const firstStringTitleLabel = new QLabel()
-  firstStringTitleLabel.setText("1° String Address *")
+  firstStringTitleLabel.setText("1° String Offset *")
   firstStringTitleLabel.setAlignment(132)
   firstStringTitleLabel.setInlineStyle(`
   width:238px;
@@ -3024,16 +3024,16 @@ function getPointersTableData(){
 
   firstStringTitleLayout.addWidget(firstStringTitleLabel)
 
-  const firstStringAddressLineEdit2 = new QLineEdit();
-  firstStringAddressLineEdit2.setPlaceholderText("1° String Address")
-  firstStringAddressLineEdit2.setToolTip("First string address in the file (without 0x).\nIt will be found using the Pointers Table Index.")
-  firstStringAddressLineEdit2.setEnabled(false)
-  firstStringAddressLineEdit2.setInlineStyle(`
+  const firstStringOffsetLineEdit2 = new QLineEdit();
+  firstStringOffsetLineEdit2.setPlaceholderText("1° String Offset")
+  firstStringOffsetLineEdit2.setToolTip("First string offset in the file (without 0x).\nIt will be found using the Pointers Table Index.")
+  firstStringOffsetLineEdit2.setEnabled(false)
+  firstStringOffsetLineEdit2.setInlineStyle(`
   width:238px;
   font-size:11px;
   `)
 
-  firstStringTitleLayout.addWidget(firstStringAddressLineEdit2)
+  firstStringTitleLayout.addWidget(firstStringOffsetLineEdit2)
 
   //Post-last string of the last Pointers Table--------------------------------------------------------
 
@@ -3044,7 +3044,7 @@ function getPointersTableData(){
   createPointersDialogLayout.addWidget(postLastStringTitle)
 
   const postLastStringTitleLabel = new QLabel()
-  postLastStringTitleLabel.setText("Post-last String Address *")
+  postLastStringTitleLabel.setText("Post-last String Offset *")
   postLastStringTitleLabel.setAlignment(132)
   postLastStringTitleLabel.setInlineStyle(`
   width:238px;
@@ -3055,16 +3055,16 @@ function getPointersTableData(){
 
   postLastStringTitleLayout.addWidget(postLastStringTitleLabel)
 
-  const postLastStringAddressLineEdit = new QLineEdit();
-  postLastStringAddressLineEdit.setPlaceholderText("Post-last String Address")
-  postLastStringAddressLineEdit.setToolTip("Post-last String Address in the file (without 0x).\nIf there are nothing else after the last string\nuse the address of the last character.")
-  postLastStringAddressLineEdit.setEnabled(true)
-  postLastStringAddressLineEdit.setInlineStyle(`
+  const postLastStringOffsetLineEdit = new QLineEdit();
+  postLastStringOffsetLineEdit.setPlaceholderText("Post-last String Offset")
+  postLastStringOffsetLineEdit.setToolTip("Post-last String Offset in the file (without 0x).\nIf there are nothing else after the last string\nuse the offset of the last character.")
+  postLastStringOffsetLineEdit.setEnabled(true)
+  postLastStringOffsetLineEdit.setInlineStyle(`
   width:238px;
   font-size:11px;
   `)
 
-  postLastStringTitleLayout.addWidget(postLastStringAddressLineEdit)
+  postLastStringTitleLayout.addWidget(postLastStringOffsetLineEdit)
 
   //Next Step Button--------------------------------------------------------
 
@@ -3074,11 +3074,11 @@ function getPointersTableData(){
   createPointersTableButton.addEventListener("clicked",function (){
 
     
-    if(firstPointerTableAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
-    && lastPointerTableAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
+    if(firstPointerTableOffsetLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
+    && lastPointerTableOffsetLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && pointersTableSectionNameLineEdit.text().match(/^[a-zA-Z0-9 ]+$/) !=null
     && globalOffsetLineEdit.text().match(/^[0-9]+$/)
-    && postLastStringAddressLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
+    && postLastStringOffsetLineEdit.text().match(/^(?:[0-9A-F]{1}|[0-9A-F]{2}|[0-9A-F]{3}|[0-9A-F]{4}|[0-9A-F]{5}|[0-9A-F]{6})$/i) !=null
     && fs.existsSync(`${selectedFile}`) === true
     ){
       console.log("The hex format is correct!")
@@ -3115,7 +3115,7 @@ function getPointersTableData(){
     let k = 0
     let i = 0
     currentContent = fs.readFileSync(`${filePathQLineEditRead.text()}`)
-    extractedTablePointersRaw = currentContent.slice(parseInt(firstPointerTableAddressLineEdit.text(),16),parseInt(lastPointerTableAddressLineEdit.text(),16))
+    extractedTablePointersRaw = currentContent.slice(parseInt(firstPointerTableOffsetLineEdit.text(),16),parseInt(lastPointerTableOffsetLineEdit.text(),16))
 
     const pointersTableViewerlistWidget = new QListWidget()
     const pointersTableViewerOptionsWidget = new QWidget()
@@ -3259,7 +3259,7 @@ function getPointersTableData(){
 
       createPointersDialogStep2.close(true)
       globalOffset = Number(globalOffsetLineEdit.text())
-      if(firstPointersTableAddressLineEdit.text()=== ""){
+      if(firstPointersTableOffsetLineEdit.text()=== ""){
         win.setFixedSize(728, 544);
 
         listWidget.setInlineStyle(`
@@ -3270,10 +3270,10 @@ function getPointersTableData(){
       `)
       }
 
-      postLastStringAddress = postLastStringAddressLineEdit.text()
+      postLastStringOffset = postLastStringOffsetLineEdit.text()
 
-      firstPointersTableAddressLineEdit.setText(firstPointerTableAddressLineEdit.text())
-      lastPointersTableAddressLineEdit.setText(lastPointerTableAddressLineEdit.text())
+      firstPointersTableOffsetLineEdit.setText(firstPointerTableOffsetLineEdit.text())
+      lastPointersTableOffsetLineEdit.setText(lastPointerTableOffsetLineEdit.text())
       sectionNameLineEdit.setText(pointersTableSectionNameLineEdit.text())
 
       createPointersTable(pointersTableSectionNameLineEdit.text())
@@ -3282,83 +3282,83 @@ function getPointersTableData(){
 
   createPointersDialogLayout.addWidget(createPointersTableButton)
 
-  postLastStringAddressLineEdit.setText(((fs.readFileSync(`${selectedFile}`)).length-1).toString(16))
+  postLastStringOffsetLineEdit.setText(((fs.readFileSync(`${selectedFile}`)).length-1).toString(16))
   
   //MH2 Preloaded Pointers Tables Configurations
   if(pointersTableSectionNameLineEdit.text()==="armor"){
-    lastPointerTableAddressLineEdit.setText("40")
+    lastPointerTableOffsetLineEdit.setText("40")
   }else if(pointersTableSectionNameLineEdit.text()==="bar"){
-    lastPointerTableAddressLineEdit.setText("50")
+    lastPointerTableOffsetLineEdit.setText("50")
   }else if(pointersTableSectionNameLineEdit.text()==="bar2"){
-    lastPointerTableAddressLineEdit.setText("70")
+    lastPointerTableOffsetLineEdit.setText("70")
   }else if(pointersTableSectionNameLineEdit.text()==="bar3"){
-    lastPointerTableAddressLineEdit.setText("48")
+    lastPointerTableOffsetLineEdit.setText("48")
   }else if(pointersTableSectionNameLineEdit.text()==="cocot"){
-    lastPointerTableAddressLineEdit.setText("90")
+    lastPointerTableOffsetLineEdit.setText("90")
   }else if(pointersTableSectionNameLineEdit.text()==="mh01"){
-    lastPointerTableAddressLineEdit.setText("78")
+    lastPointerTableOffsetLineEdit.setText("78")
   }else if(pointersTableSectionNameLineEdit.text()==="mh02"){
-    lastPointerTableAddressLineEdit.setText("78")
+    lastPointerTableOffsetLineEdit.setText("78")
   }else if(pointersTableSectionNameLineEdit.text()==="mh03"){
-    lastPointerTableAddressLineEdit.setText("78")
+    lastPointerTableOffsetLineEdit.setText("78")
   }else if(pointersTableSectionNameLineEdit.text()==="mhc"){
-    lastPointerTableAddressLineEdit.setText("28")
+    lastPointerTableOffsetLineEdit.setText("28")
   }else if(pointersTableSectionNameLineEdit.text()==="monmae"){
-    lastPointerTableAddressLineEdit.setText("80")
+    lastPointerTableOffsetLineEdit.setText("80")
   }else if(pointersTableSectionNameLineEdit.text()==="square"){
-    lastPointerTableAddressLineEdit.setText("58")
+    lastPointerTableOffsetLineEdit.setText("58")
   }else if(pointersTableSectionNameLineEdit.text()==="tunnel"){
-    lastPointerTableAddressLineEdit.setText("08")
+    lastPointerTableOffsetLineEdit.setText("08")
   }
 
   //MHP3rd Preloaded Pointers Tables Configurations
   if(pointersTableSectionNameLineEdit.text()==="0017"){
     
-    lastPointerTableAddressLineEdit.setText("CC")
+    lastPointerTableOffsetLineEdit.setText("CC")
     if(fs.readFileSync(`${selectedFile}`)[parseInt("72BED",16)]===93){
-      postLastStringAddressLineEdit.setText("72BED")
+      postLastStringOffsetLineEdit.setText("72BED")
     }else if(fs.readFileSync(`${selectedFile}`)[parseInt("72F37",16)]===93){
-      postLastStringAddressLineEdit.setText("72F37")
+      postLastStringOffsetLineEdit.setText("72F37")
     }
 
   }else if(pointersTableSectionNameLineEdit.text()==="2813"){//nonHD
-    lastPointerTableAddressLineEdit.setText("0C")
-    postLastStringAddressLineEdit.setText("389A")
+    lastPointerTableOffsetLineEdit.setText("0C")
+    postLastStringOffsetLineEdit.setText("389A")
   }else if(pointersTableSectionNameLineEdit.text()==="2836"){//HD
-    lastPointerTableAddressLineEdit.setText("0C")
-    postLastStringAddressLineEdit.setText("37B4")
+    lastPointerTableOffsetLineEdit.setText("0C")
+    postLastStringOffsetLineEdit.setText("37B4")
   }else if(pointersTableSectionNameLineEdit.text()==="2814"||pointersTableSectionNameLineEdit.text()==="2837"){
-    lastPointerTableAddressLineEdit.setText("0C")
-    postLastStringAddressLineEdit.setText("3014")
+    lastPointerTableOffsetLineEdit.setText("0C")
+    postLastStringOffsetLineEdit.setText("3014")
   }else if(pointersTableSectionNameLineEdit.text()==="2815"||pointersTableSectionNameLineEdit.text()==="2838"){
-    lastPointerTableAddressLineEdit.setText("0C")
-    postLastStringAddressLineEdit.setText("25B42")
+    lastPointerTableOffsetLineEdit.setText("0C")
+    postLastStringOffsetLineEdit.setText("25B42")
   }else if(pointersTableSectionNameLineEdit.text()==="2816"){//nonHD
-    lastPointerTableAddressLineEdit.setText("24")
-    postLastStringAddressLineEdit.setText("23317")
+    lastPointerTableOffsetLineEdit.setText("24")
+    postLastStringOffsetLineEdit.setText("23317")
   }else if(pointersTableSectionNameLineEdit.text()==="2839"){//HD
-    lastPointerTableAddressLineEdit.setText("24")
-    postLastStringAddressLineEdit.setText("232F1")
+    lastPointerTableOffsetLineEdit.setText("24")
+    postLastStringOffsetLineEdit.setText("232F1")
   }else if(pointersTableSectionNameLineEdit.text()==="2817"||pointersTableSectionNameLineEdit.text()==="2840"){
-    lastPointerTableAddressLineEdit.setText("10")
-    postLastStringAddressLineEdit.setText("5F6B0")
+    lastPointerTableOffsetLineEdit.setText("10")
+    postLastStringOffsetLineEdit.setText("5F6B0")
   }else if(pointersTableSectionNameLineEdit.text()==="2818"||pointersTableSectionNameLineEdit.text()==="2841"){
-    lastPointerTableAddressLineEdit.setText("10")
-    postLastStringAddressLineEdit.setText("A913")
+    lastPointerTableOffsetLineEdit.setText("10")
+    postLastStringOffsetLineEdit.setText("A913")
   }else if(pointersTableSectionNameLineEdit.text()==="2819"||pointersTableSectionNameLineEdit.text()==="2842"){
-    lastPointerTableAddressLineEdit.setText("0C")
-    postLastStringAddressLineEdit.setText("2645")
+    lastPointerTableOffsetLineEdit.setText("0C")
+    postLastStringOffsetLineEdit.setText("2645")
   }else if(pointersTableSectionNameLineEdit.text()==="4202"||pointersTableSectionNameLineEdit.text()==="4290"){
-    lastPointerTableAddressLineEdit.setText("88")
-    postLastStringAddressLineEdit.setText("25F3D")
+    lastPointerTableOffsetLineEdit.setText("88")
+    postLastStringOffsetLineEdit.setText("25F3D")
     globalOffsetLineEdit.setText("4")
   }else if(pointersTableSectionNameLineEdit.text()==="4203"||pointersTableSectionNameLineEdit.text()==="4291"){
-    lastPointerTableAddressLineEdit.setText("40")
-    postLastStringAddressLineEdit.setText("117B7")
+    lastPointerTableOffsetLineEdit.setText("40")
+    postLastStringOffsetLineEdit.setText("117B7")
     globalOffsetLineEdit.setText("4")
   }else if(pointersTableSectionNameLineEdit.text()==="4204"||pointersTableSectionNameLineEdit.text()==="4292"){
-    lastPointerTableAddressLineEdit.setText("20")
-    postLastStringAddressLineEdit.setText("15B92")
+    lastPointerTableOffsetLineEdit.setText("20")
+    postLastStringOffsetLineEdit.setText("15B92")
     globalOffsetLineEdit.setText("4")
   }
 
@@ -3368,9 +3368,9 @@ function getPointersTableData(){
 //Uses the info gathered by the getPointersTableData() to creates a .pt file
 //This file is saved by default in rootFolder/Pointers Tables
 async function createPointersTable(name){
-  tableStartPointerFileAddresses[0] = (parseInt(firstPointerAddressLineEdit.text(),16)).toString(16)
-  tableEndPointerStartStringFileAddresses[0] = lastPointerAddressLineEdit.text()
-  // tableEndStringFileAddresses[0] = lastStringAddressLineEdit.text()
+  tableStartPointerFileOffsets[0] = (parseInt(firstPointerOffsetLineEdit.text(),16)).toString(16)
+  tableEndPointerStartStringFileOffsets[0] = lastPointerOffsetLineEdit.text()
+  // tableEndStringFileOffsets[0] = lastStringOffsetLineEdit.text()
 
   getSectionedCurrentContent()
   if(getOrganizedSections()===1){
@@ -3383,7 +3383,6 @@ async function createPointersTable(name){
     return
   }
   getGlobalExtractedStrings()
-  i=0
 
   if(fs.existsSync("./Pointers Tables/")===false){
     fs.mkdirSync("./Pointers Tables/")
@@ -3463,17 +3462,17 @@ function loadPointersTable(pathToPTFile){
   mainMenuAction3.setEnabled(false)
   fileSizeMenu.setEnabled(true)
 
-  firstPointerAddressLineEdit.setReadOnly(true)
-  lastPointerAddressLineEdit.setReadOnly(true)
-  firstStringAddressLineEdit.setReadOnly(true)
-  lastStringAddressLineEdit.setReadOnly(true)
+  firstPointerOffsetLineEdit.setReadOnly(true)
+  lastPointerOffsetLineEdit.setReadOnly(true)
+  firstStringOffsetLineEdit.setReadOnly(true)
+  lastStringOffsetLineEdit.setReadOnly(true)
   filePathQLineEditRead.setReadOnly(true)
 
   sectionNameHeader = sectionNameLineEdit.text()
 
   pointersTableModeON = true
 
-  if(firstPointersTableAddressLineEdit.text().length=== 0){
+  if(firstPointersTableOffsetLineEdit.text().length=== 0){
     win.setFixedSize(728, 544);
 
     listWidget.setInlineStyle(`
@@ -3528,13 +3527,13 @@ function loadPTConfiguration(){
     k=0
     while(selectedTablePointers.length!=k){
 
-      tableStartPointerFileAddresses[k] = pointersTableModeSettingsArr[i]
-      tableEndPointerStartStringFileAddresses[k] = pointersTableModeSettingsArr[i+1]
-      tableEndStringFileAddresses[k] = pointersTableModeSettingsArr[i+2]
+      tableStartPointerFileOffsets[k] = pointersTableModeSettingsArr[i]
+      tableEndPointerStartStringFileOffsets[k] = pointersTableModeSettingsArr[i+1]
+      tableEndStringFileOffsets[k] = pointersTableModeSettingsArr[i+2]
       i=i+5
       k=k+1
     }
-    postLastStringAddress = tableEndStringFileAddresses[k-1]
+    postLastStringOffset = tableEndStringFileOffsets[k-1]
     globalOffset = Number(pointersTableModeSettingsArr[11])
 
     getSectionedCurrentContent()
@@ -3551,15 +3550,15 @@ function loadPTConfiguration(){
 
     sectionNameLineEdit.setReadOnly(true)
 
-    firstPointersTableAddressLineEdit.setText(pointersTableModeSettingsArr[4])
-    lastPointersTableAddressLineEdit.setText(pointersTableModeSettingsArr[5])
-    firstPointerAddressLineEdit.setText((parseInt(tableStartPointerFileAddresses[Number(sectionNameNumber.text())-1],16)+globalOffset).toString(16))
-    lastPointerAddressLineEdit.setText(tableEndPointerStartStringFileAddresses[Number(sectionNameNumber.text())-1])
-    firstStringAddressLineEdit.setText(tableEndPointerStartStringFileAddresses[Number(sectionNameNumber.text())-1])
-    lastStringAddressLineEdit.setText(tableEndStringFileAddresses[Number(sectionNameNumber.text())-1])
+    firstPointersTableOffsetLineEdit.setText(pointersTableModeSettingsArr[4])
+    lastPointersTableOffsetLineEdit.setText(pointersTableModeSettingsArr[5])
+    firstPointerOffsetLineEdit.setText((parseInt(tableStartPointerFileOffsets[Number(sectionNameNumber.text())-1],16)+globalOffset).toString(16))
+    lastPointerOffsetLineEdit.setText(tableEndPointerStartStringFileOffsets[Number(sectionNameNumber.text())-1])
+    firstStringOffsetLineEdit.setText(tableEndPointerStartStringFileOffsets[Number(sectionNameNumber.text())-1])
+    lastStringOffsetLineEdit.setText(tableEndStringFileOffsets[Number(sectionNameNumber.text())-1])
     
  
-    extractedTablePointersRaw = currentContent.slice(parseInt(firstPointersTableAddressLineEdit.text(),16),parseInt(lastPointersTableAddressLineEdit.text(),16))
+    extractedTablePointersRaw = currentContent.slice(parseInt(firstPointersTableOffsetLineEdit.text(),16),parseInt(lastPointersTableOffsetLineEdit.text(),16))
     
     i=0
     while(Number(extractedTablePointersRaw.length)>1){
@@ -3583,26 +3582,26 @@ function loadPTConfiguration(){
 //Uses the selected table pointers from the .pt file to get the parts or sections that made the
 //analized file. This goes from the first pointer until the first pointer of the next section
 function getSectionedCurrentContent(){
-  let i =0
+  let i = 0
   sectionedCurrentContent = []
   
   while(selectedTablePointers.length>i){
 
     if(selectedTablePointers.length-1!=i){
-      let firstPointerAddress1 
-      let firstPointerAddress2 
+      let firstPointerOffset1
+      let firstPointerOffset2
 
       if(bigEndian.isChecked()===false){
-        firstPointerAddress1 = Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,4)
-        firstPointerAddress2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,4)
+        firstPointerOffset1 = Buffer.from(selectedTablePointers[i], "hex").readUIntLE(0,4)
+        firstPointerOffset2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntLE(0,4)
   
-        sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
+        sectionedCurrentContent[i] = currentContent.slice(firstPointerOffset1,firstPointerOffset2)
   
       }else{
-        firstPointerAddress1 = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,4)
-        firstPointerAddress2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,4)
+        firstPointerOffset1 = Buffer.from(selectedTablePointers[i], "hex").readUIntBE(0,4)
+        firstPointerOffset2 = Buffer.from(selectedTablePointers[i+1], "hex").readUIntBE(0,4)
   
-        sectionedCurrentContent[i] = currentContent.slice(firstPointerAddress1,firstPointerAddress2)
+        sectionedCurrentContent[i] = currentContent.slice(firstPointerOffset1,firstPointerOffset2)
   
       }
     }else{
@@ -3614,7 +3613,7 @@ function getSectionedCurrentContent(){
   }
 }
 
-//Uses the data from getSectionedCurrentContent() to get their pointers and strings addresses
+//Uses the data from getSectionedCurrentContent() to get their pointers and string offsets
 function getOrganizedSections() {
   const isBigEndian = bigEndian.isChecked();
   const isFileSizeMenuAction1 = fileSizeMenuAction1.isChecked();
@@ -3629,32 +3628,32 @@ function getOrganizedSections() {
       const currentPointerBuffer = Buffer.from(currentPointerHex, "hex");
       const readMethod = isBigEndian ? 'readUIntBE' : 'readUIntLE';
       
-      // Process pointer addresses
-      tableStartPointerFileAddresses[i] = currentPointerBuffer[readMethod](0, currentPointerBuffer.length).toString(16);
+      // Process pointer offsets
+      tableStartPointerFileOffsets[i] = currentPointerBuffer[readMethod](0, currentPointerBuffer.length).toString(16);
       
       // Process offset
       const offsetBuffer = Buffer.from(sectionedCurrentContent[i].slice(0 + globalOffset, 4 + globalOffset));
       const offset = offsetBuffer[readMethod](0, 4);
-      tableEndPointerStartStringFileAddresses[i] = (offset + parseInt(tableStartPointerFileAddresses[i], 16)).toString(16);
+      tableEndPointerStartStringFileOffsets[i] = (offset + parseInt(tableStartPointerFileOffsets[i], 16)).toString(16);
 
-      // Process end string addresses
+      // Process end string offsets
       if (selectedPointers[i + 1] !== undefined) {
         const nextPointerBuffer = Buffer.from(selectedPointers[i + 1], "hex");
-        tableEndStringFileAddresses[i] = nextPointerBuffer[readMethod](0, nextPointerBuffer.length).toString(16);
+        tableEndStringFileOffsets[i] = nextPointerBuffer[readMethod](0, nextPointerBuffer.length).toString(16);
       } else {
         if (isFileSizeMenuAction1 || savedString === "") {
-          tableEndStringFileAddresses[i] = postLastStringAddress;
+          tableEndStringFileOffsets[i] = postLastStringOffset;
         } else if (isFileSizeMenuAction2) {
           const sizeDiff = currentContent.length - oldcurrentContentLength;
-          tableEndStringFileAddresses[i] = (parseInt(postLastStringAddress, 16) + sizeDiff).toString(16);
-          postLastStringAddress = tableEndStringFileAddresses[i];
+          tableEndStringFileOffsets[i] = (parseInt(postLastStringOffset, 16) + sizeDiff).toString(16);
+          postLastStringOffset = tableEndStringFileOffsets[i];
         }
       }
 
-      // Validate address
-      if (currentContent[parseInt(tableEndPointerStartStringFileAddresses[i], 16)] === undefined) {
+      // Validate offset
+      if (currentContent[parseInt(tableEndPointerStartStringFileOffsets[i], 16)] === undefined) {
         errorMessageBox.setWindowTitle("Error");
-        errorMessageBox.setText(`ERROR! The starting string address (${tableEndPointerStartStringFileAddresses[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`);
+        errorMessageBox.setText(`ERROR! The starting string offset (${tableEndPointerStartStringFileOffsets[i]})\npoints to a value that do not exist, returning\nto default state to prevent the corruption of the\n.pt file. If using the same .pt doesn't work please\ncreate a new Pointers Table for this file.`);
         errorMessageButton.setText("                                                Ok                                              ");
         errorMessageBox.exec();
         return 1;
@@ -3662,9 +3661,9 @@ function getOrganizedSections() {
 
       // Build organized section
       organizedSections[i] = `${i + 1}\n` +
-      tableStartPointerFileAddresses[i].toUpperCase() + "\n" +
-      tableEndPointerStartStringFileAddresses[i].toUpperCase() + "\n" +
-      tableEndStringFileAddresses[i].toUpperCase() + "\n";
+      tableStartPointerFileOffsets[i].toUpperCase() + "\n" +
+      tableEndPointerStartStringFileOffsets[i].toUpperCase() + "\n" +
+      tableEndStringFileOffsets[i].toUpperCase() + "\n";
 
       i++;
     } catch (error) {
@@ -3674,20 +3673,20 @@ function getOrganizedSections() {
   }
 }
 
-//globalExtractedStrings and globalAddressOfEachString are needed to calculate
+//globalExtractedStrings and globalOffsetOfEachString are needed to calculate
 //accurately the space left when table pointers mode is ON
 function getGlobalExtractedStrings(){
   
-  let i =0
-  let oldAddresses = addressOfEachString
-  while(tableEndPointerStartStringFileAddresses[i]!=undefined){
+  let i = 0
+  let oldOffsets = offsetOfEachString
+  while(tableEndPointerStartStringFileOffsets[i]!=undefined){
 
-    globalExtractedStrings[i] = currentContent.slice(parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
-    globalAddressOfEachString[i] = stringAddressFuncWithoutPointers(currentContent,parseInt(tableEndPointerStartStringFileAddresses[i],16),parseInt(tableEndStringFileAddresses[i],16))
+    globalExtractedStrings[i] = currentContent.slice(parseInt(tableEndPointerStartStringFileOffsets[i],16),parseInt(tableEndStringFileOffsets[i],16))
+    globalOffsetOfEachString[i] = stringOffsetFuncWithoutPointers(currentContent,parseInt(tableEndPointerStartStringFileOffsets[i],16),parseInt(tableEndStringFileOffsets[i],16))
 
     i =i+1
   }
-  addressOfEachString = oldAddresses
+  offsetOfEachString = oldOffsets
 }
 
 //Saves .pt file data
@@ -3712,8 +3711,8 @@ fs.writeFileSync(`./Pointers Tables/${name + ".pt"}`,
 ${name}
 
 PointersTable=
-${firstPointersTableAddressLineEdit.text()}
-${lastPointersTableAddressLineEdit.text()}
+${firstPointersTableOffsetLineEdit.text()}
+${lastPointersTableOffsetLineEdit.text()}
 
 FilePath=
 ${filePathQLineEditRead.text()}
@@ -3757,13 +3756,13 @@ function removePointersTable(){
   saveSettingsButton.setEnabled(true)
   saveSettingsButton2.setEnabled(true)
   sectionNameLineEdit.setReadOnly(false)
-  firstPointerAddressLineEdit.setReadOnly(false)
-  lastPointerAddressLineEdit.setReadOnly(false)
-  firstStringAddressLineEdit.setReadOnly(false)
-  lastStringAddressLineEdit.setReadOnly(false)
+  firstPointerOffsetLineEdit.setReadOnly(false)
+  lastPointerOffsetLineEdit.setReadOnly(false)
+  firstStringOffsetLineEdit.setReadOnly(false)
+  lastStringOffsetLineEdit.setReadOnly(false)
   filePathQLineEditRead.setReadOnly(false)
-  firstPointersTableAddressLineEdit.setText("")
-  lastPointersTableAddressLineEdit.setText("")
+  firstPointersTableOffsetLineEdit.setText("")
+  lastPointersTableOffsetLineEdit.setText("")
   fileSizeMenu.setTitle("File Size: Keep")
   sectionDetailsLabel.setText(`Section name: String#N/A`)
   mainMenuAction1.setText("Load file")
@@ -3796,7 +3795,7 @@ function removePointersTable(){
 
 //Updates .pt file with new values
 function pointersTableUpdater(){
-  let i=0
+  let i = 0
   //For the pointers table mode.
   if(extractedStrings.length>originalExtractedStringsLength){
 
@@ -3834,7 +3833,7 @@ function pointersTableUpdater(){
     i=i+1
     }
 
-    i =0
+    i = 0
     let k =0
 
     while(selectedTablePointers[i]!= undefined){
@@ -3855,12 +3854,12 @@ function pointersTableUpdater(){
       i=i+1
     }
   
-    i =0
+    i = 0
     while(oldSelectedTablePointers[i]!=undefined){
       oldSelectedTablePointers[i] = selectedTablePointers[i]
       i=i+1
     } 
-    i =0
+    i = 0
     
     while(selectedTablePointers[i]!=undefined){
 
@@ -3876,9 +3875,9 @@ function pointersTableUpdater(){
 
     let tempExtractedTablePointers = extractedTablePointers.toString("binary")
 
-    lastStringAddressLineEdit.setText((parseInt(lastStringAddressLineEdit.text(),16)+stringsOffset - stringsOldOffset).toString(16))
+    lastStringOffsetLineEdit.setText((parseInt(lastStringOffsetLineEdit.text(),16)+stringsOffset - stringsOldOffset).toString(16))
 
-    tempCurrentContent =  tempCurrentContent.substring(0,parseInt(firstPointersTableAddressLineEdit.text(),16)) + tempExtractedTablePointers +tempCurrentContent.substring(parseInt(lastPointersTableAddressLineEdit.text(),16))
+    tempCurrentContent =  tempCurrentContent.substring(0,parseInt(firstPointersTableOffsetLineEdit.text(),16)) + tempExtractedTablePointers +tempCurrentContent.substring(parseInt(lastPointersTableOffsetLineEdit.text(),16))
     currentContent = Buffer.from(tempCurrentContent,"binary")
   }
   getSectionedCurrentContent()
@@ -4017,7 +4016,7 @@ async function alignTwoCsv(){
       csvContentInHex1[i] = checkForSemicolons(csvContentInHex1[i],csvContentInHex1Style)
       i=i+1
     }
-    i =0
+    i = 0
   while(csvContentInHex2[i]!=undefined){
     csvContentInHex2[i] = checkForSemicolons(csvContentInHex2[i],csvContentInHex2Style)
     i=i+1
@@ -4147,7 +4146,7 @@ function sectionNameButtonIsBeingPressed(options) {
  * Loads a .mib file configuration data needed to get their strings.
  * 
  * Handles three scenarios:
- * 1. Configuration with pointers: Loads file, addresses, then runs start() and saveAndPrepare()
+ * 1. Configuration with pointers: Loads file, offsets, then runs start() and saveAndPrepare()
  * 2. Configuration without pointers: Same but uses saveAndPreparePointerless()
  * 3. Invalid position: Decrements section counter and stops info gathering if active
  * 
@@ -4156,29 +4155,29 @@ function sectionNameButtonIsBeingPressed(options) {
  */
 function loadMibConfiguration(arrPosition){
 
-  if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].address.firstPointer){
+  if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].offset.firstPointer){
 
     filePathQLineEditRead.setText(`${mibListObjsData[arrPosition-1].path}`)
     sectionNameLineEdit.setText(mibListObjsData[arrPosition-1].name)
     selectedFile = filePathQLineEditRead.text()
 
-    firstStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstString)
-    lastStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastString)
-    firstPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstPointer)
-    lastPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastPointer)
+    firstStringOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.firstString)
+    lastStringOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.lastString)
+    firstPointerOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.firstPointer)
+    lastPointerOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.lastPointer)
 
     start()
     saveAndPrepare(false)
-  }else if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].address.firstString){
+  }else if(mibListObjsData[arrPosition-1]&& mibListObjsData[arrPosition-1].offset.firstString){
 
     filePathQLineEditRead.setText(`${mibListObjsData[arrPosition-1].path}`)
     sectionNameLineEdit.setText(mibListObjsData[arrPosition-1].name)
     selectedFile = filePathQLineEditRead.text()
 
-    firstStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstString)
-    lastStringAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastString)
-    firstPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.firstPointer)
-    lastPointerAddressLineEdit.setText(mibListObjsData[arrPosition-1].address.lastPointer)
+    firstStringOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.firstString)
+    lastStringOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.lastString)
+    firstPointerOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.firstPointer)
+    lastPointerOffsetLineEdit.setText(mibListObjsData[arrPosition-1].offset.lastPointer)
 
     start()
     saveAndPreparePointerless(false)
@@ -4227,22 +4226,22 @@ function isMultiple(number, divider) {
 }
 
 /**
- * Scans a buffer starting from a given position to find all pointer addresses
- * and their corresponding string addresses.
+ * Scans a buffer starting from a given position to find all pointer offset
+ * and their corresponding string offsets.
  * 
  * The function works in two phases:
  * 1. Locates the first valid string pointer by scanning forward
  * 2. Then finds all subsequent pointers in the table
  * 
- * Also calculates the post-last string address, ensuring 4-byte alignment.
+ * Also calculates the post-last string offset, ensuring 4-byte alignment.
  * 
  * @param {Buffer} buffer - The file buffer to scan
  * @param {number} positionToStartSearch - Starting offset in the buffer
  * @param {number} offset - Optional offset to add to pointer values (default: 0)
  * @param {number} phase - Adjusts pointer positioning (0 or 1 typically)
- * @returns {Array} [allStringsAddress, allPointersAddress] - Arrays of hex addresses
+ * @returns {Array} [allStringsOffset, allPointersOffset] - Arrays of hex offsets
  */
-function getAddressesForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
+function getOffsetsForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
 
   const pointers = [];
 
@@ -4284,18 +4283,18 @@ function getAddressesForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
     }
   }
 
-  const allPointersAddress = new Array(pointers.length);
-  const allStringsAddress = new Array(pointers.length);
+  const allPointerOffsets = new Array(pointers.length);
+  const allStringsOffsets = new Array(pointers.length);
   
   for (let i = 0; i < pointers.length; i++) {
-    allPointersAddress[i] = pointers[i].toString(16).toUpperCase();
+    allPointerOffsets[i] = pointers[i].toString(16).toUpperCase();
 
     if(i<pointers.length-1){
-      allStringsAddress[i] = (buffer.subarray(pointers[i], pointers[i] + 4).readUInt32LE(0)+offset).toString(16).toUpperCase()
+      allStringsOffsets[i] = (buffer.subarray(pointers[i], pointers[i] + 4).readUInt32LE(0)+offset).toString(16).toUpperCase()
     }
   }
 
-  let nextNonZeroByte = parseInt(allStringsAddress[allStringsAddress.length-2],16)
+  let nextNonZeroByte = parseInt(allStringsOffsets[allStringsOffsets.length-2],16)
   while (nextNonZeroByte < buffer.length && buffer[nextNonZeroByte] !== 0) {
     nextNonZeroByte++;
   }
@@ -4318,17 +4317,17 @@ function getAddressesForMib(buffer, positionToStartSearch,offset = 0,phase = 0){
     }
   }
   
-  allStringsAddress[allStringsAddress.length-1] = postLastString
+  allStringsOffsets[allStringsOffsets.length-1] = postLastString
   
-  return [allStringsAddress, allPointersAddress];
+  return [allStringsOffsets, allPointerOffsets];
 }
 
-function tryToOptimizeTheSpaceForMibs(allStringsAddress, allpointersAddress, buffer) {
+function tryToOptimizeTheSpaceForMibs(allStringsOffsets, allpointersOffsets, buffer) {
 
   //Update all pointers data and strings position but the last one
-  for(let i = 0;allStringsAddress[i+1];i++){
-    const stringPos = parseInt(allStringsAddress[i], 16);
-    const pointerPos = parseInt(allpointersAddress[i], 16);
+  for(let i = 0;allStringsOffsets[i+1];i++){
+    const stringPos = parseInt(allStringsOffsets[i], 16);
+    const pointerPos = parseInt(allpointersOffsets[i], 16);
 
     //String limits
     let start = stringPos;
@@ -4348,9 +4347,9 @@ function tryToOptimizeTheSpaceForMibs(allStringsAddress, allpointersAddress, buf
     pointerBuffer.writeUInt32LE(targetPos);
     pointerBuffer.copy(buffer, pointerPos);
 
-    allStringsAddress[i] = targetPos.toString(16).padStart(allStringsAddress[i].length, '0').toUpperCase();
+    allStringsOffsets[i] = targetPos.toString(16).padStart(allStringsOffsets[i].length, '0').toUpperCase();
   }
-  return [allStringsAddress,buffer];
+  return [allStringsOffsets,buffer];
 }
 
 //Returns false if the file header matches known Monster Hunter unencrypted signatures,
@@ -4382,7 +4381,7 @@ function checkEncryption(filePath) {
  * 2. Files are filtered to exclude encrypted ones (using checkEncryption)
  * 3. UI switches to .mib mode (read-only fields, disabled buttons, adds "Leave Mib mode" menu)
  * 4. Each file is processed based on its game type (MH1, MHP1, MHP2, MHP3, MHTri, etc.)
- * 5. For each file, extracts pointer tables and string addresses using game-specific offsets
+ * 5. For each file, extracts pointer tables and string offsets using game-specific offsets
  * 6. Some files may generate multiple configurations (e.g., MH1 generates two)
  * 7. After processing, loads the first configuration and displays it
  * 
@@ -4419,10 +4418,10 @@ async function openAndProcessAllMibs(){
     mibListObjsData.length=0
 
     sectionNameLineEdit.setReadOnly(true)
-    lastPointerAddressLineEdit.setReadOnly(true)
-    firstPointerAddressLineEdit.setReadOnly(true)
-    firstStringAddressLineEdit.setReadOnly(true)
-    lastStringAddressLineEdit.setReadOnly(true)
+    lastPointerOffsetLineEdit.setReadOnly(true)
+    firstPointerOffsetLineEdit.setReadOnly(true)
+    firstStringOffsetLineEdit.setReadOnly(true)
+    lastStringOffsetLineEdit.setReadOnly(true)
 
     saveSettingsButton.setDisabled(true)
     saveSettingsButton2.setDisabled(true)
@@ -4446,10 +4445,10 @@ async function openAndProcessAllMibs(){
       mibListObjsData.length=0
 
       sectionNameLineEdit.setReadOnly(false)
-      lastPointerAddressLineEdit.setReadOnly(false)
-      firstPointerAddressLineEdit.setReadOnly(false)
-      firstStringAddressLineEdit.setReadOnly(false)
-      lastStringAddressLineEdit.setReadOnly(false)
+      lastPointerOffsetLineEdit.setReadOnly(false)
+      firstPointerOffsetLineEdit.setReadOnly(false)
+      firstStringOffsetLineEdit.setReadOnly(false)
+      lastStringOffsetLineEdit.setReadOnly(false)
 
       saveSettingsButton.setDisabled(false)
       saveSettingsButton2.setDisabled(false)
@@ -4479,7 +4478,7 @@ async function openAndProcessAllMibs(){
       ))){
     
         const newMibObj = {
-          address:{
+          offset:{
             firstString:"",
             lastString:"",
             firstPointer:"",
@@ -4503,20 +4502,20 @@ async function openAndProcessAllMibs(){
         let allStrings, allPointers = []
 
         if(!isEur&!isDos){
-          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,96)
+          [allStrings,allPointers] = getOffsetsForMib(mibFileBuffer,96)
         }else if(isEur){
-          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,88)
+          [allStrings,allPointers] = getOffsetsForMib(mibFileBuffer,88)
         }else{
-          [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,152)
+          [allStrings,allPointers] = getOffsetsForMib(mibFileBuffer,152)
         }
         
-        newMibObj.address.lastString = allStrings[allStrings.length-1]
-        newMibObj.address.firstString = allStrings[0]
-        newMibObj.address.lastPointer = allPointers[allPointers.length-1]
-        newMibObj.address.firstPointer = allPointers[0]
+        newMibObj.offset.lastString = allStrings[allStrings.length-1]
+        newMibObj.offset.firstString = allStrings[0]
+        newMibObj.offset.lastPointer = allPointers[allPointers.length-1]
+        newMibObj.offset.firstPointer = allPointers[0]
 
         const newMibObj2 = {
-          address:{
+          offset:{
             firstString:"",
             lastString:"",
             firstPointer:"",
@@ -4527,7 +4526,7 @@ async function openAndProcessAllMibs(){
           path:mibPath
         }
 
-        const [allStrings2,allPointers2] = getAddressesForMib(mibFileBuffer,48)
+        const [allStrings2,allPointers2] = getOffsetsForMib(mibFileBuffer,48)
         let newAllStrings,newBuffer
         
         if(mibFilebufferHeader.equals(Buffer.from('48000000', 'hex'))){
@@ -4551,11 +4550,11 @@ async function openAndProcessAllMibs(){
           errorMessageBox.exec();
         }
 
-        newMibObj2.address.lastString = stringsToUse[stringsToUse.length-1];
-        newMibObj2.address.firstString = stringsToUse[0];
+        newMibObj2.offset.lastString = stringsToUse[stringsToUse.length-1];
+        newMibObj2.offset.firstString = stringsToUse[0];
 
-        newMibObj2.address.lastPointer = allPointers2[allPointers2.length-1]
-        newMibObj2.address.firstPointer = allPointers2[0]
+        newMibObj2.offset.lastPointer = allPointers2[allPointers2.length-1]
+        newMibObj2.offset.firstPointer = allPointers2[0]
 
         mibListObjsData.push(newMibObj)
         mibListObjsData.push(newMibObj2)
@@ -4565,9 +4564,9 @@ async function openAndProcessAllMibs(){
       mibFilebufferHeader.equals(Buffer.from('94000000', 'hex'))||//MHP3RD (JP-USA-EU)
       mibFilebufferHeader.readUInt32BE(0)>16843009&&mibFileBuffer.subarray(32, 36).equals(Buffer.from('94000000', 'hex'))){//MHP3RD
         
-        for(let i =0;i<=6;i++){
+        for(let i = 0;i<=6;i++){
           const newMibObj = {
-            address:{
+            offset:{
               firstString:"",
               lastString:"",
               firstPointer:"",
@@ -4599,17 +4598,17 @@ async function openAndProcessAllMibs(){
             startPosition1 = 96
           }
 
-          const [allStrings,allPointers] = getAddressesForMib(mibFileBuffer,startPosition1,offset,i)
+          const [allStrings,allPointers] = getOffsetsForMib(mibFileBuffer,startPosition1,offset,i)
           
-          newMibObj.address.lastString = allStrings[allStrings.length-1]
-          newMibObj.address.firstString = allStrings[0]
-          newMibObj.address.lastPointer = allPointers[allPointers.length-1]
-          newMibObj.address.firstPointer = allPointers[0]
+          newMibObj.offset.lastString = allStrings[allStrings.length-1]
+          newMibObj.offset.firstString = allStrings[0]
+          newMibObj.offset.lastPointer = allPointers[allPointers.length-1]
+          newMibObj.offset.firstPointer = allPointers[0]
 
           if(startPosition2){
 
             const newMibObj2 = {
-              address:{
+              offset:{
                 firstString:"",
                 lastString:"",
                 firstPointer:"",
@@ -4620,14 +4619,14 @@ async function openAndProcessAllMibs(){
               path:mibPath
             }
           
-            const [allStrings2,allPointers2] = getAddressesForMib(mibFileBuffer,startPosition2,undefined,i)
+            const [allStrings2,allPointers2] = getOffsetsForMib(mibFileBuffer,startPosition2,undefined,i)
       
-            newMibObj2.address.lastString = allStrings2[allStrings2.length-1]
-            newMibObj2.address.firstString = allStrings2[0]
-            newMibObj2.address.lastPointer = allPointers2[allPointers2.length-1]
-            newMibObj2.address.firstPointer = allPointers2[0]
+            newMibObj2.offset.lastString = allStrings2[allStrings2.length-1]
+            newMibObj2.offset.firstString = allStrings2[0]
+            newMibObj2.offset.lastPointer = allPointers2[allPointers2.length-1]
+            newMibObj2.offset.firstPointer = allPointers2[0]
 
-            if(mibListObjsData[0]&&mibListObjsData[0].address.firstString===newMibObj.address.firstString) continue
+            if(mibListObjsData[0]&&mibListObjsData[0].offset.firstString===newMibObj.offset.firstString) continue
 
             if(isP1&&i===0){
               setShiftJISEncoding(true)
@@ -4645,7 +4644,7 @@ async function openAndProcessAllMibs(){
               setUTF8Encoding(true)
             }
 
-            if(mibListObjsData[0]&&mibListObjsData[0].address.firstString===newMibObj.address.firstString) continue
+            if(mibListObjsData[0]&&mibListObjsData[0].offset.firstString===newMibObj.offset.firstString) continue
             mibListObjsData.push(newMibObj)
           }
         }
@@ -4656,7 +4655,7 @@ async function openAndProcessAllMibs(){
 
         for(let i =1;i<=numberOfPPointers;i++){
           const newMibObj = {
-            address:{
+            offset:{
               firstString:"",
               lastString:"",
               firstPointer:"",
@@ -4678,8 +4677,8 @@ async function openAndProcessAllMibs(){
             k++
           }
         
-          newMibObj.address.lastString = toHexadecimal(firstString+k)
-          newMibObj.address.firstString = toHexadecimal(firstString)
+          newMibObj.offset.lastString = toHexadecimal(firstString+k)
+          newMibObj.offset.firstString = toHexadecimal(firstString)
 
           mibListObjsData.push(newMibObj)
         }
@@ -4728,14 +4727,14 @@ function setSelectedMainProgramFile(filePath){
   selectedFile = filePath
 }
 
-//Updates the address input fields based on whether string or pointer values are provided
+//Updates the offset input fields based on whether string or pointer values are provided
 function updateNeccesaryHexValues(values){
   if(values.firstString){
-    firstStringAddressLineEdit.setText(values.firstString)
-    lastStringAddressLineEdit.setText(values.postLastString)
+    firstStringOffsetLineEdit.setText(values.firstString)
+    lastStringOffsetLineEdit.setText(values.postLastString)
   }else{
-    firstPointerAddressLineEdit.setText(values.firstPointer)
-    lastPointerAddressLineEdit.setText(values.postLastPointer)
+    firstPointerOffsetLineEdit.setText(values.firstPointer)
+    lastPointerOffsetLineEdit.setText(values.postLastPointer)
   } 
 }
 
@@ -5030,9 +5029,9 @@ listWidget.addEventListener("clicked",() => {
   }
 
   if(addressOfEachStringInMemory[listWidget.currentRow()] != undefined){
-    stringAdressLabel.setText(`String Address: ${addressOfEachString[listWidget.currentRow()]}`+"/"+ "0x" + `${addressOfEachStringInMemory[listWidget.currentRow()].toString(16).toUpperCase().replaceAll("00","")}`)
+    stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`+"/"+ "0x" + `${addressOfEachStringInMemory[listWidget.currentRow()].toString(16).toUpperCase().replaceAll("00","")}`)
   }else{
-    stringAdressLabel.setText(`String Address: ${addressOfEachString[listWidget.currentRow()]}`)
+    stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`)
   }
 
 
@@ -5187,38 +5186,38 @@ pointerValuesLabel.setTextInteractionFlags(1)
 pointerValuesLayout.addWidget(pointerValuesLabel)
 
 
-//MWA:Pointers address------------------------------------------------------
-const pointerAddress = new QWidget();
-midWidgetLayout.addWidget(pointerAddress)
-pointerAddress.setInlineStyle(`
+//MWA:Pointer offsets------------------------------------------------------
+const pointerOffset = new QWidget();
+midWidgetLayout.addWidget(pointerOffset)
+pointerOffset.setInlineStyle(`
 border-color:black;
 border-style:solid;
 border-bottom-width:1px;
 flex:1;
 `)
 
-const pointerAddressLayout = new QBoxLayout(0);
-pointerAddress.setLayout(pointerAddressLayout)
+const pointerOffsetLayout = new QBoxLayout(0);
+pointerOffset.setLayout(pointerOffsetLayout)
 
-const pointerAddressLabel = new QLabel();
-pointerAddressLabel.setText("Pointer Address: N/A")
-pointerAddressLabel.setTextInteractionFlags(1)
-pointerAddressLayout.addWidget(pointerAddressLabel)
+const pointerOffsetLabel = new QLabel();
+pointerOffsetLabel.setText("Pointer Offset: N/A")
+pointerOffsetLabel.setTextInteractionFlags(1)
+pointerOffsetLayout.addWidget(pointerOffsetLabel)
 
-//MWA:String address------------------------------------------------------
-const stringAddress = new QWidget();
-midWidgetLayout.addWidget(stringAddress)
-stringAddress.setInlineStyle(`
+//MWA:String Offset------------------------------------------------------
+const stringOffset = new QWidget();
+midWidgetLayout.addWidget(stringOffset)
+stringOffset.setInlineStyle(`
 flex:1;
 `)
-const stringAddressLayout = new QBoxLayout(0);
-stringAddress.setLayout(stringAddressLayout)
+const stringOffsetLayout = new QBoxLayout(0);
+stringOffset.setLayout(stringOffsetLayout)
 
-const stringAdressLabel = new QLabel();
+const stringOffsetLabel = new QLabel();
 
-stringAdressLabel.setText(`String Address: File/"RAM" (Not accurate)`)
-stringAdressLabel.setTextInteractionFlags(1)
-stringAddressLayout.addWidget(stringAdressLabel)
+stringOffsetLabel.setText(`String Offset: File/"RAM" (Not accurate)`)
+stringOffsetLabel.setTextInteractionFlags(1)
+stringOffsetLayout.addWidget(stringOffsetLabel)
 
 
 //Right Widget Area (RWA)--------------------------------------------------------
@@ -5304,18 +5303,18 @@ sectionNameDownButton.addEventListener("pressed",function () {
 })
 
 
-//RWA:Table Pointers Address---------------------------------------------------------------
+//RWA:Table Pointer Offsets---------------------------------------------------------------
 
-const pointersTableAddresses = new QWidget();
-const pointersTableAddressesMainWidget = new QWidget();
-const pointersTableAddressesLayout = new FlexLayout();
-const pointersTableAddressesMainLayout = new FlexLayout();
+const pointersTableOffsets = new QWidget();
+const pointersTableOffsetsMainWidget = new QWidget();
+const pointersTableOffsetsLayout = new FlexLayout();
+const pointersTableOffsetsMainLayout = new FlexLayout();
 
-pointersTableAddresses.setLayout(pointersTableAddressesLayout)
-pointersTableAddressesMainWidget.setLayout(pointersTableAddressesMainLayout)
-rightWidgetLayout.addWidget(pointersTableAddressesMainWidget)
+pointersTableOffsets.setLayout(pointersTableOffsetsLayout)
+pointersTableOffsetsMainWidget.setLayout(pointersTableOffsetsMainLayout)
+rightWidgetLayout.addWidget(pointersTableOffsetsMainWidget)
 
-pointersTableAddresses.setInlineStyle(`
+pointersTableOffsets.setInlineStyle(`
 flex-direction:column;
 height:0px;
 `)
@@ -5324,12 +5323,12 @@ height:0px;
 function rezisePointersTableLineEdit() {
 
   if(pointersTableModeON===true){
-    pointersTableAddresses.setInlineStyle(`
+    pointersTableOffsets.setInlineStyle(`
     flex-direction:column;
     height:40x;
     `)
   }else{
-    pointersTableAddresses.setInlineStyle(`
+    pointersTableOffsets.setInlineStyle(`
     flex-direction:column;
     height:0x;
     `)
@@ -5337,155 +5336,155 @@ function rezisePointersTableLineEdit() {
 
 }
 
-const firstPointersTableAddressLineEdit = new QLineEdit();
-const lastPointersTableAddressLineEdit = new QLineEdit();
-firstPointersTableAddressLineEdit.setReadOnly(true)
-lastPointersTableAddressLineEdit.setReadOnly(true)
-firstPointersTableAddressLineEdit.setToolTip("First pointer table address in the file, for the section that you will translate (without 0x).")
-firstPointersTableAddressLineEdit.setPlaceholderText("First pointer table address")
-lastPointersTableAddressLineEdit.setPlaceholderText("Post-last pointer table address")
-lastPointersTableAddressLineEdit.setToolTip("Post-last pointer table address in the file, for the section that you will translate (without 0x).")
-lastPointersTableAddressLineEdit.setInlineStyle(`
+const firstPointersTableOffsetLineEdit = new QLineEdit();
+const lastPointersTableOffsetLineEdit = new QLineEdit();
+firstPointersTableOffsetLineEdit.setReadOnly(true)
+lastPointersTableOffsetLineEdit.setReadOnly(true)
+firstPointersTableOffsetLineEdit.setToolTip("First pointer table offset in the file, for the section that you will translate (without 0x).")
+firstPointersTableOffsetLineEdit.setPlaceholderText("First pointer table offset")
+lastPointersTableOffsetLineEdit.setPlaceholderText("Post-last pointer table affset")
+lastPointersTableOffsetLineEdit.setToolTip("Post-last pointer table affset in the file, for the section that you will translate (without 0x).")
+lastPointersTableOffsetLineEdit.setInlineStyle(`
 width:118px;
 font-size:11px;
 `)
-firstPointersTableAddressLineEdit.setInlineStyle(`
+firstPointersTableOffsetLineEdit.setInlineStyle(`
 width:119px;
 font-size:11px;
 `)
 
 
-const pointersTableAddressTitleWidget = new QWidget()
-const pointersTableAddressLineEditWidget = new QWidget()
+const pointersTableOffsetTitleWidget = new QWidget()
+const pointersTableOffsetLineEditWidget = new QWidget()
 
 
-pointersTableAddressesMainLayout.addWidget(pointersTableAddresses)
-pointersTableAddressesLayout.addWidget(pointersTableAddressTitleWidget)
-pointersTableAddressesLayout.addWidget(pointersTableAddressLineEditWidget)
+pointersTableOffsetsMainLayout.addWidget(pointersTableOffsets)
+pointersTableOffsetsLayout.addWidget(pointersTableOffsetTitleWidget)
+pointersTableOffsetsLayout.addWidget(pointersTableOffsetLineEditWidget)
 
-const pointersTableAddressTitleWidgetLayout = new FlexLayout()
-const pointersTableAddressLineEditWidgetLayout = new FlexLayout()
+const pointersTableOffsetTitleWidgetLayout = new FlexLayout()
+const pointersTableOffsetLineEditWidgetLayout = new FlexLayout()
 
-pointersTableAddressLineEditWidget.setInlineStyle(`
+pointersTableOffsetLineEditWidget.setInlineStyle(`
 flex-direction:row;
 `)
 
-pointersTableAddressTitleWidget.setLayout(pointersTableAddressTitleWidgetLayout)
-pointersTableAddressLineEditWidget.setLayout(pointersTableAddressLineEditWidgetLayout)
+pointersTableOffsetTitleWidget.setLayout(pointersTableOffsetTitleWidgetLayout)
+pointersTableOffsetLineEditWidget.setLayout(pointersTableOffsetLineEditWidgetLayout)
 
-const pointerTableAddressLineEditTitle = new QLabel();
-pointerTableAddressLineEditTitle.setText("Pointers Table address *")
-pointerTableAddressLineEditTitle.setAlignment(132)
-pointerTableAddressLineEditTitle.setInlineStyle(`
+const pointerTableOffsetLineEditTitle = new QLabel();
+pointerTableOffsetLineEditTitle.setText("Pointers Table Offset *")
+pointerTableOffsetLineEditTitle.setAlignment(132)
+pointerTableOffsetLineEditTitle.setInlineStyle(`
 border-color:black;
 border-style:solid;
 border-bottom-width:1px;
 `)
 
-pointersTableAddressTitleWidgetLayout.addWidget(pointerTableAddressLineEditTitle)
-pointersTableAddressLineEditWidgetLayout.addWidget(firstPointersTableAddressLineEdit)
-pointersTableAddressLineEditWidgetLayout.addWidget(lastPointersTableAddressLineEdit)
+pointersTableOffsetTitleWidgetLayout.addWidget(pointerTableOffsetLineEditTitle)
+pointersTableOffsetLineEditWidgetLayout.addWidget(firstPointersTableOffsetLineEdit)
+pointersTableOffsetLineEditWidgetLayout.addWidget(lastPointersTableOffsetLineEdit)
 
-//RWA:Pointers Address---------------------------------------------------------------
-const pointerAdresses = new QWidget();
-const pointerAdressesLayout = new FlexLayout();
-pointerAdresses.setLayout(pointerAdressesLayout)
-rightWidgetLayout.addWidget(pointerAdresses)
-pointerAdresses.setInlineStyle(`
+//RWA:Pointer Offsets---------------------------------------------------------------
+const pointerOffsets = new QWidget();
+const pointerOffsetsLayout = new FlexLayout();
+pointerOffsets.setLayout(pointerOffsetsLayout)
+rightWidgetLayout.addWidget(pointerOffsets)
+pointerOffsets.setInlineStyle(`
 flex-direction:column;
 `)
 
-const firstPointerAddressLineEdit = new QLineEdit();
-const lastPointerAddressLineEdit = new QLineEdit();
-firstPointerAddressLineEdit.setToolTip("First pointer address in the file, for the section that you will translate (without 0x).")
-firstPointerAddressLineEdit.setPlaceholderText("First pointer address")
-lastPointerAddressLineEdit.setPlaceholderText("Post-last pointer address")
-lastPointerAddressLineEdit.setToolTip("Post-last pointer address in the file, for the section that you will translate (without 0x).")
-lastPointerAddressLineEdit.setInlineStyle(`
+const firstPointerOffsetLineEdit = new QLineEdit();
+const lastPointerOffsetLineEdit = new QLineEdit();
+firstPointerOffsetLineEdit.setToolTip("First pointer offset in the file, for the section that you will translate (without 0x).")
+firstPointerOffsetLineEdit.setPlaceholderText("First pointer offset")
+lastPointerOffsetLineEdit.setPlaceholderText("Post-last pointer offset")
+lastPointerOffsetLineEdit.setToolTip("Post-last pointer offset in the file, for the section that you will translate (without 0x).")
+lastPointerOffsetLineEdit.setInlineStyle(`
 width:118px;
 font-size:11px;
 `)
-firstPointerAddressLineEdit.setInlineStyle(`
+firstPointerOffsetLineEdit.setInlineStyle(`
 width:119px;
 font-size:11px;
 `)
 
 
-const pointerAddressTitleWidget = new QWidget()
-const pointerAddressLineEditWidget = new QWidget()
+const pointerOffsetTitleWidget = new QWidget()
+const pointerOffsetLineEditWidget = new QWidget()
 
-pointerAdressesLayout.addWidget(pointerAddressTitleWidget)
-pointerAdressesLayout.addWidget(pointerAddressLineEditWidget)
+pointerOffsetsLayout.addWidget(pointerOffsetTitleWidget)
+pointerOffsetsLayout.addWidget(pointerOffsetLineEditWidget)
 
-const pointerAddressTitleWidgetLayout = new FlexLayout()
-const pointerAddressLineEditWidgetLayout = new FlexLayout()
+const pointerOffsetTitleWidgetLayout = new FlexLayout()
+const pointerOffsetLineEditWidgetLayout = new FlexLayout()
 
-pointerAddressLineEditWidget.setInlineStyle(`
+pointerOffsetLineEditWidget.setInlineStyle(`
 flex-direction:row;
 `)
 
-pointerAddressTitleWidget.setLayout(pointerAddressTitleWidgetLayout)
-pointerAddressLineEditWidget.setLayout(pointerAddressLineEditWidgetLayout)
+pointerOffsetTitleWidget.setLayout(pointerOffsetTitleWidgetLayout)
+pointerOffsetLineEditWidget.setLayout(pointerOffsetLineEditWidgetLayout)
 
-const pointerAddressLineEditTitle = new QLabel();
-pointerAddressLineEditTitle.setText("Pointers address")
-pointerAddressLineEditTitle.setAlignment(132)
-pointerAddressLineEditTitle.setInlineStyle(`
+const pointerOffsetLineEditTitle = new QLabel();
+pointerOffsetLineEditTitle.setText("Pointer Offsets")
+pointerOffsetLineEditTitle.setAlignment(132)
+pointerOffsetLineEditTitle.setInlineStyle(`
 border-color:black;
 border-style:solid;
 border-bottom-width:1px;
 `)
 
-pointerAddressTitleWidgetLayout.addWidget(pointerAddressLineEditTitle)
-pointerAddressLineEditWidgetLayout.addWidget(firstPointerAddressLineEdit)
-pointerAddressLineEditWidgetLayout.addWidget(lastPointerAddressLineEdit)
+pointerOffsetTitleWidgetLayout.addWidget(pointerOffsetLineEditTitle)
+pointerOffsetLineEditWidgetLayout.addWidget(firstPointerOffsetLineEdit)
+pointerOffsetLineEditWidgetLayout.addWidget(lastPointerOffsetLineEdit)
 
 
-//RWA: Strings Address-----------------------------------------------------
-const stringAdressesTitle = new QWidget();
-const stringAdressesLayout2 = new FlexLayout();
-stringAdressesTitle.setLayout(stringAdressesLayout2)
-rightWidgetLayout.addWidget(stringAdressesTitle)
+//RWA: String Offsets-----------------------------------------------------
+const stringOffsetsTitle = new QWidget();
+const stringOffsetsLayout2 = new FlexLayout();
+stringOffsetsTitle.setLayout(stringOffsetsLayout2)
+rightWidgetLayout.addWidget(stringOffsetsTitle)
 
-const stringAdressesTitleLabel = new QLabel()
-stringAdressesTitleLabel.setText("Strings address *")
-stringAdressesTitleLabel.setAlignment(132)
-stringAdressesTitleLabel.setInlineStyle(`
+const stringOffsetsTitleLabel = new QLabel()
+stringOffsetsTitleLabel.setText("String offsets *")
+stringOffsetsTitleLabel.setAlignment(132)
+stringOffsetsTitleLabel.setInlineStyle(`
 border-color:black;
 border-style:solid;
 border-bottom-width:1px;
 `)
 
-stringAdressesLayout2.addWidget(stringAdressesTitleLabel)
+stringOffsetsLayout2.addWidget(stringOffsetsTitleLabel)
 
-const stringAdresses = new QWidget();
-const stringAdressesLayout = new FlexLayout();
-stringAdresses.setLayout(stringAdressesLayout)
-rightWidgetLayout.addWidget(stringAdresses)
-stringAdresses.setInlineStyle(`
+const stringOffsets = new QWidget();
+const stringOffsetsLayout = new FlexLayout();
+stringOffsets.setLayout(stringOffsetsLayout)
+rightWidgetLayout.addWidget(stringOffsets)
+stringOffsets.setInlineStyle(`
 flex-direction:row;
 `)
 
-const firstStringAddressLineEdit = new QLineEdit();
-const lastStringAddressLineEdit = new QLineEdit();
-firstStringAddressLineEdit.setPlaceholderText("First string address")
-firstStringAddressLineEdit.setToolTip("First string address in the file, for the section that you will translate (without 0x).")
-lastStringAddressLineEdit.setPlaceholderText("Post-last string address")
-lastStringAddressLineEdit.setToolTip("Post-last string address in the file, for the section that you will translate (without 0x).")
+const firstStringOffsetLineEdit = new QLineEdit();
+const lastStringOffsetLineEdit = new QLineEdit();
+firstStringOffsetLineEdit.setPlaceholderText("First string offset")
+firstStringOffsetLineEdit.setToolTip("First string offset in the file, for the section that you will translate (without 0x).")
+lastStringOffsetLineEdit.setPlaceholderText("Post-last string offset")
+lastStringOffsetLineEdit.setToolTip("Post-last string offset in the file, for the section that you will translate (without 0x).")
 
 
-lastStringAddressLineEdit.setInlineStyle(`
+lastStringOffsetLineEdit.setInlineStyle(`
 width:118px;
 font-size:11px;
 `)
 
-firstStringAddressLineEdit.setInlineStyle(`
+firstStringOffsetLineEdit.setInlineStyle(`
 width:119px;
 font-size:11px;
 `)
 
-stringAdressesLayout.addWidget(firstStringAddressLineEdit)
-stringAdressesLayout.addWidget(lastStringAddressLineEdit)
+stringOffsetsLayout.addWidget(firstStringOffsetLineEdit)
+stringOffsetsLayout.addWidget(lastStringOffsetLineEdit)
 
 //RWA:File path--------------------------------------------------------
 const filePath = new QWidget();
@@ -5632,7 +5631,7 @@ const pointersEditorRealocateButton = new QPushButton()
 pointersEditorRealocateButton.setEnabled(false)
 
 pointersEditorRealocateButton.setText("Move to new string")
-pointersEditorRealocateButton.setToolTip("Relocate the selected pointer to a new string (If there are space to do it) and save.\n\nNote: If the selected pointer address is left in emtpy in the above typing field\nit will trigger an hex viewer to choose manually the address where to put the text.\nIf the address into the field is different, it will try to put the text there.\nIf the selected pointer address and the one in the field are the same,\nit will try to put the text at the end of the string section (faster method).")
+pointersEditorRealocateButton.setToolTip("Relocate the selected pointer to a new string (If there are space to do it) and save.\n\nNote: If the selected pointer offset is left in emtpy in the above typing field\nit will trigger an hex viewer to choose manually the offset where to put the text.\nIf the offset into the field is different, it will try to put the text there.\nIf the selected pointer offset and the one in the field are the same,\nit will try to put the text at the end of the string section (faster method).")
 pointersViewerLeftLayout.addWidget(pointersEditorRealocateButton)
 
 //Change the values of a pointer to make it match with a new empty string
@@ -5653,7 +5652,7 @@ pointersViewerButtonToHide00.addEventListener("clicked",function(){
 //to the pointers viewer and the specific pointers viewer.
 pointersViewerFull.addEventListener("itemSelectionChanged",function (){
 
-  let i =0;
+  let i = 0;
   let k = 0;
   let phase = 0
   let counter =1
@@ -5667,7 +5666,7 @@ pointersViewerFull.addEventListener("itemSelectionChanged",function (){
     
     if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerFull.currentItem().text().toUpperCase() && phase===0){
       
-      pointerAddressLabel.setText(`Pointer Address: ${addressOfEachPointer[i].toString(16).toUpperCase()}`)
+      pointerOffsetLabel.setText(`Pointer Offset: ${offsetOfEachPointer[i].toString(16).toUpperCase()}`)
 
       if(oldSelectedString != -1){
 
@@ -5920,10 +5919,10 @@ function parseOldCfgFormat(cfgBuffer) {
     configurations.push({
       sectionNumber: sectionNumber,
       sectionName: decode(parts[1]),
-      firstPointerAddress: decode(parts[2]),
-      lastPointerAddress: decode(parts[3]),
-      firstStringAddress: decode(parts[4]),
-      lastStringAddress: decode(parts[5]),
+      firstPointerOffset: decode(parts[2]),
+      lastPointerOffset: decode(parts[3]),
+      firstStringOffset: decode(parts[4]),
+      lastStringOffset: decode(parts[5]),
       filePath: decode(parts[6]),
       encoding: decode(parts[7]) === "0" ? "UTF8" : "SJIS"
     });
