@@ -27,7 +27,14 @@ const {
 
 } = require("@nodegui/nodegui");
 
-import { hexView,currentEncoding,hexViewBuffer, setUTF8EncodingAndRender, setShiftJISEncodingAndRender,shutdownHexView,toHexadecimal} from "./hexView";
+const {
+  hexView,
+  currentEncoding,
+  hexViewBuffer,
+  setUTF8EncodingAndRender,
+  setShiftJISEncodingAndRender,
+  shutdownHexView,toHexadecimal
+} = require("./hexView.js")
 
 const Os = require ('os')
 const fs = require('fs')
@@ -6052,7 +6059,14 @@ font-size:12px;
 win.setCentralWidget(rootView);
 win.show();
 
-
-export {setShiftJISEncoding,setUTF8Encoding,start,relocateStringPosition,selectedFile as selectedMainProgramFile,setSelectedMainProgramFile,updateNeccesaryHexValues}
+module.exports = {
+  setShiftJISEncoding,
+  setUTF8Encoding,
+  start,
+  relocateStringPosition,
+  selectedMainProgramFile:selectedFile,
+  setSelectedMainProgramFile,
+  updateNeccesaryHexValues
+}
 
 global.win = win;

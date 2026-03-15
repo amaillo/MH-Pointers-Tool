@@ -1,4 +1,4 @@
-import { 
+const { 
     QMainWindow, 
     QGridLayout, 
     QWidget, 
@@ -20,8 +20,16 @@ import {
     QBoxLayout, 
     Direction,
     TextFormat 
-} from "@nodegui/nodegui";
-import { setShiftJISEncoding, setUTF8Encoding, start, setSelectedMainProgramFile, updateNeccesaryHexValues,relocateStringPosition } from "./index.js";
+} = require ("@nodegui/nodegui")
+
+const {
+    setShiftJISEncoding,
+    setUTF8Encoding,
+    start,
+    setSelectedMainProgramFile,
+    updateNeccesaryHexValues,
+    relocateStringPosition
+} = require ("./index.js");
 
 const fs = require('fs');
 const Os = require('os');
@@ -64,7 +72,7 @@ let hexTableInstance = null;
 let utf8ButtonInstance = null;
 let shiftJISButtonInstance = null;
 let hexWindowInstance = null;
-let addressLabelInstance = null;
+let offsetLabelInstance = null;
 let charLabelInstance = null;
 
 // VARIABLES FOR VIRTUALIZATION
@@ -223,14 +231,14 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
     utf8ButtonInstance = utf8Button;
     shiftJISButtonInstance = shiftJISButton;
 
-    addressLabelInstance = new QLabel();
+    offsetLabelInstance = new QLabel();
     charLabelInstance = new QLabel();
     
     charLabelInstance.setTextInteractionFlags(1)
-    addressLabelInstance.setTextInteractionFlags(1)
+    offsetLabelInstance.setTextInteractionFlags(1)
     charLabelInstance.setTextFormat(TextFormat.RichText);
     
-    addressLabelInstance.setInlineStyle(`
+    offsetLabelInstance.setInlineStyle(`
         background-color: #f0f0f0;
         font-family: monospace;
         font-size: 12px;
@@ -284,7 +292,7 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
     
     mainLayout.addWidget(headerWidget, 0, 1, 1, 4);
     
-    mainLayout.addWidget(addressLabelInstance, 1, 0, 1, 1);
+    mainLayout.addWidget(offsetLabelInstance, 1, 0, 1, 1);
     mainLayout.addWidget(hexTableInstance, 1, 1, 1, 2);
     mainLayout.addWidget(charLabelInstance, 1, 3, 1, 2);
 
@@ -525,11 +533,11 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
         
         if (startIndex !== null && endIndex !== null) {
             const selectionEndByteIndex = Math.max(startIndex, endIndex);
-            let nextAlignedAddress = Math.floor((selectionEndByteIndex + 1) / 4) * 4;
+            let nextAlignedOffset = Math.floor((selectionEndByteIndex + 1) / 4) * 4;
             if ((selectionEndByteIndex + 1) % 4 !== 0) {
-                nextAlignedAddress += 4;
+                nextAlignedOffset += 4;
             }
-            const postLastPointer = nextAlignedAddress < currentBuffer.length ? nextAlignedAddress : -1;
+            const postLastPointer = nextAlignedOffset < currentBuffer.length ? nextAlignedOffset : -1;
             
             updateNeccesaryHexValues({firstPointer: toHexadecimal(startIndex), postLastPointer: toHexadecimal(postLastPointer)});
         } else {
@@ -644,24 +652,24 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
     return hexWindow;
 }
 
-// NEW FUNCTION TO UPDATE THE ADDRESS LABEL
-function updateAddressLabel() {
-    if (!currentBuffer || !addressLabelInstance || !hexTableInstance) {
-        addressLabelInstance.setText('-');
+// NEW FUNCTION TO UPDATE THE OFFSET LABEL
+function updateOffsetLabel() {
+    if (!currentBuffer || !offsetLabelInstance || !hexTableInstance) {
+        offsetLabelInstance.setText('-');
         return;
     }
     const totalRows = Math.ceil(currentBuffer.length / BYTES_PER_ROW);
     const firstVisibleRow = hexTableInstance.verticalScrollBar().value();
     const lastVisibleRow = Math.min(firstVisibleRow + ROWS_TO_RENDER, totalRows - 1);
 
-    let addressText = ' \n\n';
+    let offsetText = ' \n\n';
 
     for (let row = firstVisibleRow; row <= lastVisibleRow; row++) {
-        const address = row * BYTES_PER_ROW;
-        addressText += address.toString(16).toUpperCase().padStart(8, '0') + '\n\n';
+        const offset = row * BYTES_PER_ROW;
+        offsetText += offset.toString(16).toUpperCase().padStart(8, '0') + '\n\n';
     }
     
-    addressLabelInstance.setText(addressText.trim());
+    offsetLabelInstance.setText(offsetText.trim());
 }
 
 let skipFirstByteOfNextRow = false;
@@ -676,7 +684,7 @@ function renderVisibleRows() {
     const totalRows = Math.ceil(currentBuffer.length / BYTES_PER_ROW);
     hexTable.setRowCount(totalRows);
 
-    updateAddressLabel();
+    updateOffsetLabel();
 
     const rowHeight = hexTable.rowHeight(0);
     const charHeaderLabels = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"];
@@ -858,4 +866,12 @@ const toHexadecimal = (number) => {
     return hexString;
 };
 
-export { hexView, currentEncoding, currentBuffer as hexViewBuffer, setUTF8EncodingAndRender, setShiftJISEncodingAndRender, shutdownHexView,toHexadecimal};
+module.exports = {
+    hexView,
+    currentEncoding,
+    hexViewBuffer: currentBuffer,
+    setUTF8EncodingAndRender,
+    setShiftJISEncodingAndRender,
+    shutdownHexView,
+    toHexadecimal
+};

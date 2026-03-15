@@ -1,8 +1,8 @@
 const path = require("path");
 
-
 module.exports = {
-  mode: process.NODE_ENV || "development",
+  mode: process.env.NODE_ENV || "development",
+  devtool: "source-map",
   entry: "./src",
   target: "node",
   output: {

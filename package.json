@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack build ./src/index.js",
-    "test": "qode ./dist/index.js",
-    "start": "webpack --mode development && qode ./dist/index.js",
-    "debug": "webpack --devtool source-map && qode --inspect --enable-source-maps ./dist/index.js"
+    "test": "qode ./src/index.js",
+    "start": "webpack build && qode ./src/index.js",
+    "debug": "webpack --devtool source-map && qode --inspect --enable-source-maps ./src/index.js"
   },
   "keywords": [
     "monster",
