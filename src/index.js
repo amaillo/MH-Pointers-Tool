@@ -51,10 +51,10 @@ let currentContent = ""
 let rawStrings = [] //in hex, contains all 00
 let extractedStrings = []
 let selectedFile = ""
-let string1OffsetDecimal= ""
-let string2OffsetDecimal = ""
-let pointer1OffsetDecimal= ""
-let pointer2OffsetDecimal = ""
+let firstStringOffsetInDecimal= ""
+let lastStringOffsetInDecimal = ""
+let firstPointerOffsetInDecimal= ""
+let lastPointerOffsetInDecimal = ""
 let extractedStringsOLD = ""
 let spaceLeftInSection = 0
 let offsetOfEachString = []
@@ -105,6 +105,9 @@ let oldcurrentContentLength
 let timer
 let csvTranslationCanceled = false
 const mibListObjsData = []
+let sectionChangeInProcess = false
+let initPointersTableMode = false
+let tableModeMasterDataObj
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -141,14 +144,14 @@ function setNextItem(){
 
       sectionDetailsLabel.setText(`${sectionNameHeader}: String#${listWidget.currentRow()+1}`)
 
-      if(pointer1OffsetDecimal!= ""){
+      if(firstPointerOffsetInDecimal!= ""){
         stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`+"/"+ "0x" + `${addressOfEachStringInMemory[listWidget.currentRow()].toString(16).toUpperCase().replaceAll("00","")}`)
 
       }else{
         stringOffsetLabel.setText(`String Offset: ${offsetOfEachString[listWidget.currentRow()]}`)
       }
 
-      if(pointer1OffsetDecimal!= ""){
+      if(firstPointerOffsetInDecimal!= ""){
         pointerValuesLabel.setText(`Pointer HexValues: ${pointersHexValues[listWidget.currentRow()].toString(16).toUpperCase()}`)
 
       }
@@ -226,17 +229,13 @@ function saveAndPrepare(doASave) {
     return;
   }
 
-  const pointer1Addr = firstPointerOffsetLineEdit.text();
-  const pointer2Addr = lastPointerOffsetLineEdit.text();
-  pointer1OffsetDecimal = parseInt(pointer1Addr, 16);
-  pointer2OffsetDecimal = parseInt(pointer2Addr, 16);
+  firstPointerOffsetInDecimal = parseInt(firstPointerOffsetLineEdit.text(), 16);
+  lastPointerOffsetInDecimal = parseInt(lastPointerOffsetLineEdit.text(), 16);
 
   if (!validatePointerOffsets()) return;
 
-  const string1Addr = firstStringOffsetLineEdit.text();
-  const string2Addr = lastStringOffsetLineEdit.text();
-  string1OffsetDecimal = parseInt(string1Addr, 16);
-  string2OffsetDecimal = parseInt(string2Addr, 16);
+  firstStringOffsetInDecimal = parseInt(firstStringOffsetLineEdit.text(), 16)
+  lastStringOffsetInDecimal = parseInt(lastStringOffsetLineEdit.text(), 16)
 
   if (!validateStringOffsets()) return;
 
@@ -258,10 +257,8 @@ function saveAndPreparePointerless(doASave) {
     return;
   }
 
-  const string1Addr = firstStringOffsetLineEdit.text();
-  const string2Addr = lastStringOffsetLineEdit.text();
-  string1OffsetDecimal = parseInt(string1Addr, 16);
-  string2OffsetDecimal = parseInt(string2Addr, 16);
+  firstStringOffsetInDecimal = parseInt(firstStringOffsetLineEdit.text(), 16)
+  lastStringOffsetInDecimal = parseInt(lastStringOffsetLineEdit.text(), 16)
 
   if (!validateStringOffsets()) return;
 
@@ -303,12 +300,12 @@ function validateHexOffsets(checkPointers = true) {
 
 //Check if the pointer offsets are ok
 function validatePointerOffsets() {
-  if (pointer1OffsetDecimal > currentContent.length || 
-    pointer2OffsetDecimal > currentContent.length) {
+  if (firstPointerOffsetInDecimal > currentContent.length || 
+    lastPointerOffsetInDecimal > currentContent.length) {
     return handleOffsetsError("At least one pointer offset is too big for this file x_x");
   }
-  if (pointer2OffsetDecimal <= pointer1OffsetDecimal) {
-    const msg = pointer2OffsetDecimal === pointer1OffsetDecimal ?
+  if (lastPointerOffsetInDecimal <= firstPointerOffsetInDecimal) {
+    const msg = lastPointerOffsetInDecimal === firstPointerOffsetInDecimal ?
       "Invalid pointer offsets, same offsets" :
       "Invalid pointers scheme, the last pointer offset\nis greater than the first one";
     return handleOffsetsError(msg);
@@ -318,12 +315,12 @@ function validatePointerOffsets() {
 
 //Check if the string offsets are ok
 function validateStringOffsets() {
-  if (string1OffsetDecimal > currentContent.length || 
-    string2OffsetDecimal > currentContent.length) {
+  if (firstStringOffsetInDecimal > currentContent.length || 
+    lastStringOffsetInDecimal > currentContent.length) {
     return handleOffsetsError("At least one string offset is too big for this file x_x");
   }
-  if (string2OffsetDecimal <= string1OffsetDecimal) {
-    const msg = string2OffsetDecimal === string1OffsetDecimal ?
+  if (lastStringOffsetInDecimal <= firstStringOffsetInDecimal) {
+    const msg = lastStringOffsetInDecimal === firstStringOffsetInDecimal ?
       "Invalid string offsets, same offsets" :
       "Invalid string scheme, the last string offset\nis greater than the first one";
     return handleOffsetsError(msg);
@@ -347,7 +344,7 @@ function handleOffsetsError(message) {
 
 // Get pointers using the given offsets, separate them into groups of 4 bytes, and add them to the viewer
 function processPointers() {
-  extractedPointers = currentContent.slice(pointer1OffsetDecimal, pointer2OffsetDecimal);
+  extractedPointers = currentContent.slice(firstPointerOffsetInDecimal, lastPointerOffsetInDecimal);
   pointersViewerFull.clear();
   hiddenPointers = 0;
   let nonZeroIndex = 0;
@@ -378,7 +375,7 @@ function processPointers() {
 //parses them (handling consecutive nulls), converts encoding if needed,
 //and displays them in the string list widget.
 function processStrings() {
-  extractedStrings = currentContent.slice(string1OffsetDecimal, string2OffsetDecimal);
+  extractedStrings = currentContent.slice(firstStringOffsetInDecimal, lastStringOffsetInDecimal);
   let tempStrings = extractedStrings;
   rawStrings = [];
   let i = 0;
@@ -428,18 +425,20 @@ function executeFinalFunctions(doASave, isPointerless = false) {
     hexValuesFunc();
     pointerAdjuster(currentContent);
   }else{
-    stringOffsetFuncWithoutPointers(currentContent, string1OffsetDecimal, string2OffsetDecimal);
+    stringOffsetFuncWithoutPointers(currentContent, firstStringOffsetInDecimal, lastStringOffsetInDecimal);
   }
   
   spaceLeftFunc(extractedStrings);
   
   if(pointersTableModeON){
-    pointersTableUpdater();
-  }else{
-    if(doASave) {
-      saveConfiguration();
-    }
+    if (!initPointersTableMode&&!sectionChangeInProcess) pointersTableUpdater();
+  }else if(doASave){
+    saveConfiguration();
   }
+
+  if(initPointersTableMode) initPointersTableMode = false
+
+  if(sectionChangeInProcess) sectionChangeInProcess = false
 }
 
 //Enables (or not) pointers to be edited
@@ -462,11 +461,11 @@ function enablePointerControls(enable) {
 //data = currentContent, basically, the file.
 function stringOffsetFunc(data) {
 
-  let i = string1OffsetDecimal;
+  let i = firstStringOffsetInDecimal;
   let phase = data[i] !== 0 ? 1 : 0;
   let k = 0;
   let firstLetterFound = phase === 1;
-  const endOffset = string2OffsetDecimal;
+  const endOffset = lastStringOffsetInDecimal;
 
   offsetOfEachString.length = 0;
   
@@ -509,13 +508,13 @@ function stringOffsetFunc(data) {
   
   oldPointersHexValues = [...pointersHexValues];
 
-  const firstAddr = parseInt(offsetOfEachString[0], 16);
+  const firstOffset = parseInt(offsetOfEachString[0], 16);
   const refHex = extractedPointersIn4[0].toString("hex");
   const refLength = refHex.length;
   const padInfo = getPaddingInfo(refHex);
 
   for (let idx = 1; idx < offsetOfEachString.length; idx++) {
-    const diff = parseInt(offsetOfEachString[idx], 16) - firstAddr;
+    const diff = parseInt(offsetOfEachString[idx], 16) - firstOffset;
     let newHex = (firstPointerVal + diff).toString(16);
 
     if (!isBE) {
@@ -588,15 +587,15 @@ function stringOffsetFuncWithoutPointers(data,start,end){
 
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
 //are in the specified section of the file, or the entire file if is a pointers table.
-function spaceLeftFunc(data){
+function spaceLeftFunc(stringsData){
   spaceLeftInSection = 0
   let i = 0
 
   if(pointersTableModeON===false){
 
-    while(data[i] != undefined){
+    while(stringsData[i] != undefined){
   
-      if(data[i] === 0){
+      if(stringsData[i] === 0){
         spaceLeftInSection= spaceLeftInSection+1
       }
       i=i+1
@@ -629,10 +628,10 @@ function spaceLeftFunc(data){
 //Saves the offset of each pointer to be used later.
 function pointerOffsetFunc(){
 
-  let i = pointer1OffsetDecimal;
+  let i = firstPointerOffsetInDecimal;
   let k = 0;
 
-  while(i < pointer2OffsetDecimal){
+  while(i < lastPointerOffsetInDecimal){
 
     offsetOfEachPointer[k]= i
     k=k+1
@@ -686,7 +685,7 @@ function pointerAdjuster(data){
   let tempCurrentContent = data.toString("binary")
   let tempExtractedPointers = extractedPointers.toString("binary")
 
-  tempCurrentContent = tempCurrentContent.substring(0,pointer1OffsetDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2OffsetDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,firstPointerOffsetInDecimal) + tempExtractedPointers  + tempCurrentContent.substring(lastPointerOffsetInDecimal)
   currentContent = Buffer.from(tempCurrentContent, "binary")
   i = 0;
   while(extractedPointersIn4[i] != undefined){
@@ -733,7 +732,7 @@ function saveProgress(isCSVTranslation,replacement){
   let newBuffer = Buffer.alloc(1)
   savedString = Buffer.concat([savedString,newBuffer])
 
-  if(pointer1OffsetDecimal=== ""){
+  if(firstPointerOffsetInDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>savedString.length){
 
       savedString = Buffer.concat([savedString,newBuffer])
@@ -747,7 +746,7 @@ function saveProgress(isCSVTranslation,replacement){
     }
   }
 
-  if(pointer1OffsetDecimal=== ""){
+  if(firstPointerOffsetInDecimal=== ""){
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
   
@@ -761,7 +760,7 @@ function saveProgress(isCSVTranslation,replacement){
   }
 
 
-  if(pointer1OffsetDecimal=== ""){
+  if(firstPointerOffsetInDecimal=== ""){
     while(rawStrings[listWidget.currentRow()].length>oldRawString.length){
       
       rawStrings[listWidget.currentRow()] = rawStrings[listWidget.currentRow()].slice(0,-1)
@@ -798,24 +797,26 @@ function saveProgress(isCSVTranslation,replacement){
 
   let tempCurrentContent = currentContent.toString("binary")
   let tempExtractedStrings = extractedStrings.toString("binary")
-  string2OffsetDecimal= parseInt(lastStringOffsetLineEdit.text(),16)
+  lastStringOffsetInDecimal= parseInt(lastStringOffsetLineEdit.text(),16)
 
-  tempCurrentContent = tempCurrentContent.substring(0,string1OffsetDecimal) + tempExtractedStrings  + tempCurrentContent.substring(string2OffsetDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,firstStringOffsetInDecimal) + tempExtractedStrings  + tempCurrentContent.substring(lastStringOffsetInDecimal)
 
   oldcurrentContentLength = currentContent.length
   currentContent = Buffer.from(tempCurrentContent, "binary")
 
-  if(pointersTableModeON===true &&currentContent.length>oldcurrentContentLength&&fileSizeMenuAction1.isChecked()===true){
+  if(pointersTableModeON===true &&
+    currentContent.length>oldcurrentContentLength&&
+    fileSizeMenuAction1.isChecked()===true){
+
     let howMuchToCut = currentContent.length-oldcurrentContentLength
     let currentContentBufferArr = []
     currentContentBufferArr[0] = currentContent.subarray(0,parseInt(postLastStringOffset,16)-1)
     currentContentBufferArr[1] = newBuffer
     currentContentBufferArr[2] = currentContent.subarray(parseInt(postLastStringOffset,16)+howMuchToCut)
     currentContent = Buffer.concat(currentContentBufferArr)
-
   }
 
-  if(pointer1OffsetDecimal=== ""&&pointersTableModeON===false){
+  if(firstPointerOffsetInDecimal=== ""&&pointersTableModeON===false){
 
   spaceLeftFunc(extractedStrings)
 
@@ -927,8 +928,8 @@ function setDefaultValues(options){
   if (options===1){
 
   }else if(options===2){  
-  pointer1OffsetDecimal= ""
-  pointer2OffsetDecimal = ""
+  firstPointerOffsetInDecimal= ""
+  lastPointerOffsetInDecimal = ""
   }else if(options ===3){
 
     sectionedCurrentContent = []
@@ -1130,6 +1131,7 @@ function plus1(tableMode,options){
     }
     savedString=""
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())+1}` + " ")
+    sectionChangeInProcess = true
     loadPTConfiguration()
   }
 }
@@ -1153,7 +1155,7 @@ function minus1(tableMode){
   }else{
     savedString=""
     sectionNameNumber.setText(`${Number(sectionNameNumber.text())-1}` + " ")
-
+    sectionChangeInProcess = true
     loadPTConfiguration()
   }
 }
@@ -1309,7 +1311,7 @@ function processSingleSection(selectedCsv, isWordOnlyTranslation) {
 function processAllSections(selectedCsv, isWordOnlyTranslation) {
   let endReached = false;
   csvInfoGatheringMode = true;
-  sectionPaginationPointerFlag = pointer1OffsetDecimal ? 2 : 1;
+  sectionPaginationPointerFlag = firstPointerOffsetInDecimal ? 2 : 1;
 
   goToFirstSection();
 
@@ -1598,7 +1600,7 @@ async function foundAndReplaceIfMatch(replaceStrings, searchStrings, isWordOnlyT
     globalQApplication.processEvents();
   }
 
-  if (!isWordOnlyTranslation && pointer1OffsetDecimal !== "" && csvTranslationMode) {
+  if (!isWordOnlyTranslation && firstPointerOffsetInDecimal !== "" && csvTranslationMode) {
     handlePostTranslation(endReached, true);
   } else if (!isWordOnlyTranslation && csvTranslationMode) {
     handlePostTranslation(endReached, false);
@@ -1773,7 +1775,7 @@ function exportAllSelectionScreen(){
     exportAllSelectionStringsAndMoreButton.setText("All of this section")
 
     exportAllSelectionAllStringsAndMoreButton.setText("All data from sections")
-    if(pointer1OffsetDecimal === ""){
+    if(firstPointerOffsetInDecimal === ""){
 
       exportAllSelectionStringsAndMoreButton.setToolTip("Exports all the Strings and their offsets found in this section\nof the file using this configuration.")
       
@@ -2292,7 +2294,7 @@ async function exportToCSVManager(exportOptionNumber,addFileName){
   let exportedDataFinal = []
   if(!pointersTableModeON){
 
-    if(pointer1OffsetDecimal === ""){
+    if(firstPointerOffsetInDecimal === ""){
 
       //Offset and strings in this section
       if(exportOptionNumber===0){
@@ -2312,7 +2314,7 @@ async function exportToCSVManager(exportOptionNumber,addFileName){
         exportedData = exportStringsOffsetAndPointersFromAllSections(exportOptionNumber,addFileName)
       }
 
-    }else if (pointer1OffsetDecimal != ""){
+    }else if (firstPointerOffsetInDecimal != ""){
       //Export all of this section
       if(exportOptionNumber===0){
       exportedData = exportStringsOffsetAndPointersFromAllSections(exportOptionNumber,addFileName)
@@ -2420,7 +2422,7 @@ function hideShow(){
 //pointers viewer, if found a match, is selected.
 function highlightPointers(relocateMode = false){
   
-  if(pointer1OffsetDecimal!= ""){
+  if(firstPointerOffsetInDecimal!= ""){
     let i = 0;
     quantityOfSharedPointers=1
 
@@ -2778,7 +2780,7 @@ function saveEditedPointer(){
   let tempCurrentContent = currentContent.toString("binary")
   let tempExtractedPointers = extractedPointers.toString("binary")
 
-  tempCurrentContent = tempCurrentContent.substring(0,pointer1OffsetDecimal) + tempExtractedPointers  + tempCurrentContent.substring(pointer2OffsetDecimal)
+  tempCurrentContent = tempCurrentContent.substring(0,firstPointerOffsetInDecimal) + tempExtractedPointers  + tempCurrentContent.substring(lastPointerOffsetInDecimal)
   currentContent = Buffer.from(tempCurrentContent, "binary")
   pointersViewerFull.removeItemWidget(pointersViewerFull.item(itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]))
 
@@ -3380,7 +3382,7 @@ async function createPointersTable(name){
   // tableEndStringFileOffsets[0] = lastStringOffsetLineEdit.text()
 
   getSectionedCurrentContent()
-  if(getOrganizedSections()===1){
+  if(getOrganizedSectionsData()===1){
 
     if(csvTranslationMode===true){
       csvTranslationCanceled = true
@@ -3490,6 +3492,7 @@ function loadPointersTable(pathToPTFile){
   }
   rezisePointersTableLineEdit()
   sectionNameNumber.setText("1 ")
+  initPointersTableMode = true
   loadPTConfiguration()
 }
 
@@ -3544,7 +3547,7 @@ function loadPTConfiguration(){
     globalOffset = Number(pointersTableModeSettingsArr[11])
 
     getSectionedCurrentContent()
-    if(getOrganizedSections()===1){
+    if(getOrganizedSectionsData()===1){
 
       if(csvTranslationMode===true){
         csvTranslationCanceled = true
@@ -3621,7 +3624,7 @@ function getSectionedCurrentContent(){
 }
 
 //Uses the data from getSectionedCurrentContent() to get their pointers and string offsets
-function getOrganizedSections() {
+function getOrganizedSectionsData() {
   const isBigEndian = bigEndian.isChecked();
   const isFileSizeMenuAction1 = fileSizeMenuAction1.isChecked();
   const isFileSizeMenuAction2 = fileSizeMenuAction2.isChecked();
@@ -3678,12 +3681,49 @@ function getOrganizedSections() {
       return 1;
     }
   }
+
+  if(!sectionChangeInProcess) getStringsAndPointersMasterDataObj()
+}
+
+function getStringsAndPointersMasterDataObj(){
+  let i = 0
+  let k = 0
+  tableModeMasterDataObj = new Array(sectionedCurrentContent.length).fill().map(() => [])
+
+  for(i=0, k = 0;i<=sectionedCurrentContent.length-1;k++){
+    const pointerBuffer = sectionedCurrentContent[i].subarray(k*4,4*(k+1))
+    let pointerDecimals = false
+    if(pointerBuffer.length===4){
+      pointerDecimals = bigEndian.isChecked()? pointerBuffer.readUInt32BE(0,4) : pointerBuffer.readUInt32LE(0,4)
+    }
+
+    if(pointerDecimals && pointerDecimals>currentContent.length||pointerBuffer.length<4){
+      i = i+1
+      k=-1
+    }else{
+      let nextZeroByte = 0
+      
+      while (nextZeroByte < sectionedCurrentContent[i].length && sectionedCurrentContent[i][nextZeroByte+pointerDecimals] != 0) {
+        nextZeroByte++;
+      }
+
+      const stringBuffer = sectionedCurrentContent[i].subarray(pointerDecimals,nextZeroByte+pointerDecimals)
+      
+      tableModeMasterDataObj[i][k] = {
+        stringBuffer:stringBuffer,
+        stringPosition: currentContent.indexOf(stringBuffer), 
+        pointerBuffer:pointerBuffer,
+        pointerPosition:currentContent.indexOf(pointerBuffer),
+      }
+    }
+  }
+  //console.log(tableModeMasterDataObj)
 }
 
 //globalExtractedStrings and globalOffsetOfEachString are needed to calculate
 //accurately the space left when table pointers mode is ON
 function getGlobalExtractedStrings(){
-  
+  globalOffsetOfEachString = []
   let i = 0
   let oldOffsets = offsetOfEachString
   while(tableEndPointerStartStringFileOffsets[i]!=undefined){
@@ -3887,8 +3927,9 @@ function pointersTableUpdater(){
     tempCurrentContent =  tempCurrentContent.substring(0,parseInt(firstPointersTableOffsetLineEdit.text(),16)) + tempExtractedTablePointers +tempCurrentContent.substring(parseInt(lastPointersTableOffsetLineEdit.text(),16))
     currentContent = Buffer.from(tempCurrentContent,"binary")
   }
+  
   getSectionedCurrentContent()
-  if(getOrganizedSections()===1){
+  if(getOrganizedSectionsData()===1){
 
     if(csvTranslationMode===true){
       csvTranslationCanceled = true
