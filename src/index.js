@@ -475,13 +475,9 @@ function stringOffsetFunc(data){
     phase = 1;
     firstLetterFound= true
   }
-  let parseEnd
-  if(extractedStrings.length>originalExtractedStringsLength){
-    parseEnd = lastStringOffsetInDecimal + (extractedStrings.length-originalExtractedStringsLength)
-  }else{
-    parseEnd = lastStringOffsetInDecimal
-  }
-  
+  lastStringOffsetInDecimal = parseInt(lastStringOffsetLineEdit.text(), 16)
+const parseEnd = lastStringOffsetInDecimal
+
   while(i != parseEnd){
     
     if(data[i] != 0 && phase === 1){
@@ -748,13 +744,14 @@ function hexValuesFunc() {
 function pointerAdjuster(data){
   let i = 0;
 
-  extractedPointers = Buffer.concat(extractedPointersIn4)
+  extractedPointers = Buffer.concat(extractedPointersIn4);
 
-  let tempCurrentContent = data.toString("binary")
-  let tempExtractedPointers = extractedPointers.toString("binary")
+  currentContent = Buffer.concat([
+      data.subarray(0, firstPointerOffsetInDecimal),
+      extractedPointers,
+      data.subarray(lastPointerOffsetInDecimal)
+  ]);
 
-  tempCurrentContent = tempCurrentContent.substring(0,firstPointerOffsetInDecimal) + tempExtractedPointers  + tempCurrentContent.substring(lastPointerOffsetInDecimal)
-  currentContent = Buffer.from(tempCurrentContent, "binary")
   i = 0;
   while(extractedPointersIn4[i] != undefined){
     if(pointersViewerFull.item(i).text() !=extractedPointersIn4[i].toString("hex").toUpperCase()){
@@ -775,7 +772,7 @@ function saveProgress(isCSVTranslation,replacement){
   }else if(listWidget.currentRow() === -1||stringEditorTextEdit.toPlainText()===""){
     return
   }
-
+  let currentItemBackup
   if(isCSVTranslation){
 
     savedString = replacement
@@ -783,7 +780,7 @@ function saveProgress(isCSVTranslation,replacement){
     listWidget.currentItem().setText(tempEncode)
     
   }else{
-
+    currentItemBackup = listWidget.currentItem().text()
     listWidget.currentItem().setText(stringEditorTextEdit.toPlainText())
 
     if(shiftJISEncoding===true){
@@ -879,19 +876,39 @@ function saveProgress(isCSVTranslation,replacement){
     currentContent.length>oldcurrentContentLength&&
     fileSizeMenuAction1.isChecked()===true){
 
+    const currentSectionIndex = Number(sectionNameNumber.text())-1
+    const maxAvailableSpace = getMaxAvailableSpace()
+    const savedStringLength = savedString.length-1
+    let lastStringData = getLast2CharaString()
+    const isCurrentRowAndSection = lastStringData.mainIndex===currentSectionIndex&&lastStringData.secondaryIndex===listWidget.currentRow()
+    
+    if(savedStringLength>maxAvailableSpace&&!isCurrentRowAndSection){
+      
+      tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,maxAvailableSpace)
+      savedString = Buffer.concat([savedString.subarray(0,maxAvailableSpace),Buffer.alloc(1)])
+      rawStrings[listWidget.currentRow()] = savedString
+      extractedStrings = Buffer.concat(rawStrings)
+
+      currentContent = Buffer.concat([
+      currentContent.subarray(0, start),
+      extractedStrings,
+      currentContent.subarray(end+currentContent.length-oldcurrentContentLength)
+      ]);
+    }else{
+      tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,savedString.length-1)
+    }
+
     let howMuchToCut = currentContent.length-oldcurrentContentLength
     const sizeDiff = currentContent.length-oldcurrentContentLength
     totalDeletedBytes = 0
 
-    const currentSectionIndex = Number(sectionNameNumber.text())-1
-
-    tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,savedString.length-1)
+    if(howMuchToCut===0) listWidget.currentItem().setText(currentItemBackup)
 
     while(howMuchToCut>0){
-      const lastStringData = getLast2CharaString()
+      lastStringData = getLast2CharaString()
       const howMuchIsAvailableToCut = tableModeMasterDataObj[lastStringData.mainIndex][lastStringData.secondaryIndex]["stringBuffer"].length-1
-      let howMuchRemainIntact
-      
+      const oldHowMuchToCut = howMuchToCut
+
       if(howMuchToCut>howMuchIsAvailableToCut){
         howMuchRemainIntact = 1
         howMuchToCut = howMuchToCut-howMuchIsAvailableToCut
@@ -902,9 +919,11 @@ function saveProgress(isCSVTranslation,replacement){
         howMuchRemainIntact = howMuchIsAvailableToCut-howMuchToCut+1
         howMuchToCut = 0
       }
-
+      const howMuchWillBeCutThisTime = oldHowMuchToCut-howMuchToCut
       const bufferToCheck = tableModeMasterDataObj[lastStringData.mainIndex][lastStringData.secondaryIndex]["stringBuffer"]
       const pointerToCheck = tableModeMasterDataObj[lastStringData.mainIndex][lastStringData.secondaryIndex]["pointerBuffer"]
+      
+      //Cut the unneeded part of the "last" string remembe to check duplicated
       tableModeMasterDataObj[lastStringData.mainIndex].forEach((item,index)=>{
 
         if(bufferToCheck.equals(item.stringBuffer)&&pointerToCheck.equals(item.pointerBuffer)){
@@ -912,6 +931,10 @@ function saveProgress(isCSVTranslation,replacement){
         }
       })
 
+      if(lastStringData.mainIndex>currentSectionIndex){
+        lastStringOffsetLineEdit.setText((parseInt(lastStringOffsetLineEdit.text(),16)+howMuchWillBeCutThisTime).toString(16).toUpperCase())
+      }
+      //console.log(getMaxAvailableSpace())
       rebuildCurrentContentUsingMasterDataObj(tableModeMasterDataObj,oldTableModeMasterDataObj,lastStringData,sizeDiff)
       oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj)
     }
@@ -919,7 +942,7 @@ function saveProgress(isCSVTranslation,replacement){
 
   if(firstPointerOffsetInDecimal=== ""&&pointersTableModeON===false){
 
-  spaceLeftFunc(extractedStrings)
+    spaceLeftFunc(extractedStrings)
 
   }else{
     stringOffsetFunc(currentContent)
@@ -951,6 +974,31 @@ function saveProgress(isCSVTranslation,replacement){
     }
   })
 }
+let newpass = []
+let oldpass = []
+function getMaxAvailableSpace(){
+  const currentRow = listWidget.currentRow()
+  const currentSection = Number(sectionNameNumber.text())-1
+  let counter = 0
+  oldpass = structuredClone(newpass)
+  newpass = []
+  let doBreak = false
+  for(let i = sectionedCurrentContent.length - 1; i >= currentSection; i--) {
+    for(let k = tableModeMasterDataObj[i].length - 1; k >= currentRow; k--) {
+      counter = counter+tableModeMasterDataObj[i][k]["stringBuffer"].length-1
+      newpass.push(tableModeMasterDataObj[i][k]["stringBuffer"])
+      
+      if (i===currentSection&&k===currentRow){
+        doBreak=true 
+        break
+      }
+    }
+    if(doBreak)break
+  }
+  
+  return counter+1
+  //-tableModeMasterDataObj[currentSection].length
+}
 
 function rebuildCurrentContentUsingMasterDataObj(fullData,oldFullData,modifiedStringIndexes,sizeDiff){
   if(pointersTableModeON){
@@ -973,8 +1021,8 @@ function rebuildCurrentContentUsingMasterDataObj(fullData,oldFullData,modifiedSt
         const currentSectionOffset = isCurrentSection? sizeDiff:0
         const offsetCharaAdded = isCurrentSection? 0:deletedBytes
 
-        if(!iAndKAreSame&&!isCurrentSection||isCurrentSection&&
-          k>currentSectionStringIndex){
+        if(!iAndKAreSame&&!isCurrentSection||
+          isCurrentSection&&k>currentSectionStringIndex){
           const exampleHex = selectedTablePointers[0].length
           
           //Updates pointer buffer
@@ -1014,20 +1062,24 @@ function rebuildCurrentContentUsingMasterDataObj(fullData,oldFullData,modifiedSt
       }
       if(breakTime) break
       const selectedTablePointersBuff = Buffer.from(selectedTablePointers[i],"hex")
-      const exampleHex = selectedTablePointers[0].length
+      
       let newselectedTablePointersBuff
+      newselectedTablePointersBuff = Buffer.alloc(4);
 
       if(bigEndian.isChecked()){
-        const padInfo = getPaddingInfo(selectedTablePointers[0].length)
-        newselectedTablePointersBuff = Buffer.from(applyPadding((selectedTablePointersBuff.readUint32BE(0)+(totalDeletedBytes-sizeDiff)).toString(16),exampleHex, padInfo),"hex")
+        const currentValue = selectedTablePointersBuff.readUIntBE(0, 4);
+        newselectedTablePointersBuff.writeIntBE(currentValue + (totalDeletedBytes - sizeDiff), 0, 4);
       }else{
-        newselectedTablePointersBuff = Buffer.from(padAndReverseHex((selectedTablePointersBuff.readUint32LE(0)+(totalDeletedBytes-sizeDiff)).toString(16),exampleHex),"hex")
+        const currentValue = selectedTablePointersBuff.readUIntLE(0, 4);
+        newselectedTablePointersBuff.writeIntLE(currentValue + (totalDeletedBytes - sizeDiff), 0, 4);
       }
-      selectedTablePointers[i] = newselectedTablePointersBuff.toString("hex")
+
+      selectedTablePointers[i] = newselectedTablePointersBuff.toString("hex");
 
       const targetIndex = (i*2)+1;
       extractedTablePointersIn4[targetIndex] = Buffer.from(selectedTablePointers[i], "hex");
       sectionedCurrentContentLength--
+      
       //newselectedTablePointersBuff.copy(currentContent, tablePointersIndexPositions[i])
 
       //Monitor pointers integrity DEBUG
@@ -3982,15 +4034,24 @@ function getStringsAndPointersMasterDataObj(){
       const pointerPosition = bigEndian.isChecked()?
       Buffer.from(selectedTablePointers[i],"hex").readUint32BE(0)+ k*4:
       Buffer.from(selectedTablePointers[i],"hex").readUint32LE(0)+ k*4
+      
+      let duplicatedPointerDoSkip = false
+      for(let s =0;tableModeMasterDataObj[i][k-1-s];s++){
+        if (Buffer.compare(tableModeMasterDataObj[i][k-1-s]["pointerBuffer"],pointerBuffer)===0){
+          duplicatedPointerDoSkip = true
+        }
+      }
 
-      tableModeMasterDataObj[i][k] = {
+      if(duplicatedPointerDoSkip) continue
+
+      tableModeMasterDataObj[i].push({
         stringBuffer:stringBuffer,
         stringPosition: stringPosition,
         pointerBuffer:pointerBuffer,
         pointerPosition: pointerPosition,
-      }
-      oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj)
+      })
     }
+    oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj)
   }
   //console.log(tableModeMasterDataObj)
 }
@@ -4133,32 +4194,26 @@ function pointersTableUpdater(){
     }else{
       return
     }
-    
-    let temp1
-    let temp2
-    
-    while(sectionedCurrentContent[i]!=undefined){
 
-      if(bigEndian.isChecked()===false){
+    while(sectionedCurrentContent[i] != undefined) {
+      let tempBuf = Buffer.alloc(4);
+      let finalValue;
 
-        temp1 = Buffer.from(selectedTablePointers[i],"hex").readUIntLE(0,4) + stringsOffset - stringsOldOffset
-        temp2 = temp1.toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0')
-        selectedTablePointers[i] = temp2.match(/.{1,2}/g).reverse().join('')
-      
+      if(bigEndian.isChecked()) {
+        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntBE(0, 4) + stringsOffset - stringsOldOffset;
+        tempBuf.writeUIntBE(finalValue, 0, 4);
       }else{
-
-        temp1 = Buffer.from(selectedTablePointers[i],"hex").readUIntBE(0,4) + stringsOffset - stringsOldOffset
-        temp2 = temp1.toString(16).toUpperCase().padStart(selectedTablePointers[i].length, '0')
-        selectedTablePointers[i] = temp2.match(/.{1,2}/g).reverse().join('')
+        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntLE(0, 4) + stringsOffset - stringsOldOffset;
+        tempBuf.writeUIntLE(finalValue, 0, 4);
       }
-
-      i=i+1
+      selectedTablePointers[i] = tempBuf.toString("hex").toUpperCase();
+      i=i+1;
     }
 
     i = 0;
     while(selectedTablePointers[i] != undefined) {
       if(selectedTablePointers[i].toUpperCase() !== oldSelectedTablePointers[i].toUpperCase()) {  
-        let targetIndex = (i * 2) + 1;
+        let targetIndex = (i*2)+1;
 
         if(extractedTablePointersIn4[targetIndex] != undefined) {
           extractedTablePointersIn4[targetIndex] = Buffer.from(selectedTablePointers[i], "hex");
@@ -4187,6 +4242,8 @@ function pointersTableUpdater(){
       extractedTablePointers,
       currentContent.subarray(end)
     ]);
+
+    originalExtractedStringsLength = currentContent.slice(firstStringOffsetInDecimal, parseInt(lastStringOffsetLineEdit.text(),16)).length
   }
   
   getSectionedCurrentContent()
