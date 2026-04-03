@@ -74,7 +74,6 @@ let sectionNameHeader= "Section name"
 let hiddenPointers = 0
 let selectedTablePointers = []
 let extractedTablePointersRaw = []
-let extractedTablePointers = ""
 let extractedTablePointersIn4 = []
 let extractedTablePointersIn4Non0 = []
 let tableStartPointerFileOffsets = []
@@ -111,7 +110,7 @@ let tableModeMasterDataObj
 let oldTableModeMasterDataObj
 let totalDeletedBytes
 let sectionedCurrentContentLength = 0
-let tablePointersIndexPositions
+//let tablePointersIndexPositions
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -801,28 +800,37 @@ function saveProgress(isCSVTranslation,replacement){
     while(rawStrings[listWidget.currentRow()].length>savedString.length){
 
       savedString = Buffer.concat([savedString,newBuffer])
-      
     }
-  }else{
-    while(rawStrings[listWidget.currentRow()].length<savedString.length){
-  
-      rawStrings[listWidget.currentRow()] = Buffer.concat([rawStrings[listWidget.currentRow()],newBuffer])
-      // console.log("Adding 00 to rawString nro" + ` ${listWidget.currentRow()}` +` ${rawStrings[listWidget.currentRow()].length-savedString.length}`)
-    }
-  }
-
-  if(firstPointerOffsetInDecimal=== ""){
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
   
   rawStrings[listWidget.currentRow()] = savedString
   extractedStrings = Buffer.concat(rawStrings)
 
-  //Recordatory: Re-check this thing if something related to strings fail
-  if(extractedStrings.length>extractedStringsOLD.length&&pointersTableModeON===true||
-    fileSizeMenuAction1.isChecked()&&pointersTableModeON===true){
+  const end = parseInt(lastStringOffsetLineEdit.text(), 16);
+
+  if(extractedStrings.length>extractedStringsOLD.length&&
+    pointersTableModeON===true&&
+    fileSizeMenuAction1.isChecked()){
+
+    let countHowMany00 = 0
+    let i = end
+    while(currentContent[i-1]===0){
+      countHowMany00++
+      i--
+    }
+    i = 0
+    let bytesToDelete = extractedStrings.length-extractedStringsOLD.length
+    while(countHowMany00>1&&bytesToDelete>0){
+      const lastRawString = rawStrings.length-1
+      rawStrings[lastRawString] = rawStrings[lastRawString].subarray(0,rawStrings[lastRawString].length-i-1)
+      bytesToDelete--
+      countHowMany00--
+    }
+    //if(countHowMany00>2){    }
+    extractedStrings = Buffer.concat(rawStrings)
+
     extractedStringsOLD = Buffer.concat(rawStrings)
-    // console.log("Updating extractedStringsOLD")
   }
 
 
@@ -835,7 +843,6 @@ function saveProgress(isCSVTranslation,replacement){
         
         rawStrings[listWidget.currentRow()] = rawStrings[listWidget.currentRow()].slice(0,-1)
         rawStrings[listWidget.currentRow()] = Buffer.concat([rawStrings[listWidget.currentRow()],newBuffer])
-       
       }
     }
 
@@ -852,6 +859,8 @@ function saveProgress(isCSVTranslation,replacement){
           extractedStrings = Buffer.concat([extractedStrings,newBuffer])
         }
       }
+    }else{
+      //while(){}
     }
   }
 
@@ -862,7 +871,6 @@ function saveProgress(isCSVTranslation,replacement){
   }
 
   const start = firstStringOffsetInDecimal;
-  const end = parseInt(lastStringOffsetLineEdit.text(), 16);
 
   oldcurrentContentLength = currentContent.length;
 
@@ -956,6 +964,10 @@ function saveProgress(isCSVTranslation,replacement){
     pointersTableUpdater()
     spaceLeftFunc(extractedStrings)
   }
+  //This will be useful when using saveProgress again
+  //last rawString will be updated to add the 00
+  const lastStringPosition = parseInt(offsetOfEachString[offsetOfEachString.length-1],16)
+  rawStrings[rawStrings.length-1] = currentContent.subarray(lastStringPosition,lastStringOffsetInDecimal)
 
   fs.writeFileSync(`${selectedFile}`,currentContent,{
     encoding: "binary",
@@ -974,19 +986,19 @@ function saveProgress(isCSVTranslation,replacement){
     }
   })
 }
-let newpass = []
-let oldpass = []
+//let newpass = [] debug
+//let oldpass = []
 function getMaxAvailableSpace(){
   const currentRow = listWidget.currentRow()
   const currentSection = Number(sectionNameNumber.text())-1
   let counter = 0
-  oldpass = structuredClone(newpass)
-  newpass = []
+  //oldpass = structuredClone(newpass)
+  //newpass = []
   let doBreak = false
   for(let i = sectionedCurrentContent.length - 1; i >= currentSection; i--) {
     for(let k = tableModeMasterDataObj[i].length - 1; k >= currentRow; k--) {
       counter = counter+tableModeMasterDataObj[i][k]["stringBuffer"].length-1
-      newpass.push(tableModeMasterDataObj[i][k]["stringBuffer"])
+      //newpass.push(tableModeMasterDataObj[i][k]["stringBuffer"])
       
       if (i===currentSection&&k===currentRow){
         doBreak=true 
@@ -2239,12 +2251,9 @@ function exportStringsOffsetAndPointersFromAllSections(options, addFileName) {
       const textLines = textToSplit.includes('\r\n')?textToSplit.split('\r\n'):textToSplit.split('\n')
       const offset = offsetOfEachString[i].toString("hex");
 
-      
-      // Procesar cada línea del string
       for (let j = 0; j < textLines.length; j++) {
         let line = `${checkForSemicolons(textLines[j], 0)};`;
         
-        // Solo mostrar datos de dirección/pointers en la primera línea
         if (j === 0) {
           line += `${offset};`;
           
@@ -3839,7 +3848,7 @@ function loadPTConfiguration(){
     }
     getGlobalExtractedStrings()
 
-    tablePointersIndexPositions = mapPointersPositions(currentContent,parseInt(pointersTableModeSettingsArr[4],16),parseInt(pointersTableModeSettingsArr[5],16))
+    //tablePointersIndexPositions = mapPointersPositions(currentContent,parseInt(pointersTableModeSettingsArr[4],16),parseInt(pointersTableModeSettingsArr[5],16))
 
     sectionNameLineEdit.setReadOnly(true)
 
@@ -3993,7 +4002,7 @@ function getOrganizedSectionsData() {
       i++;
     }catch(error){
       errorMessageBox.setWindowTitle("Error");
-      errorMessageBox.setText(`Error processing pointer at index, ${i}\nmaybe the file has been already changed.`);
+      errorMessageBox.setText(`Error processing pointer at index, ${i}\nmaybe the file has been already changed\nor this is a bug.`);
       errorMessageButton.setText("                                                Ok                                              ");
       errorMessageBox.exec();
       console.error("Error processing pointer at index", i, ":", error);
