@@ -111,6 +111,7 @@ let oldTableModeMasterDataObj
 let totalDeletedBytes
 let sectionedCurrentContentLength = 0
 //let tablePointersIndexPositions
+let oldRawStrings = []
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -413,6 +414,7 @@ function processStrings() {
     
     listWidget.addItem(new QListWidgetItem(text));
   }
+  oldRawStrings = structuredClone(rawStrings)
   extractedStringsOLD = Buffer.concat(rawStrings);
   originalExtractedStringsLength = extractedStringsOLD.length;
 }
@@ -658,14 +660,12 @@ function spaceLeftFunc(stringsData){
 
     while(stringsData[i] != undefined){
   
-      if(stringsData[i] === 0){
+      if(stringsData[i] === 0&&stringsData[i+1] === 0){
         spaceLeftInSection= spaceLeftInSection+1
       }
       i=i+1
     }
-
-    spaceLeftInSection = spaceLeftInSection -offsetOfEachString.length
-    spaceLeftLabel.setText(`Space left: ${spaceLeftInSection+1}`)
+    spaceLeftLabel.setText(`Space left: ${spaceLeftInSection}`)
   }else if(pointersTableModeON===true){
     let k = 0;
     while(globalExtractedStrings[k]!=undefined){
@@ -775,8 +775,7 @@ function saveProgress(isCSVTranslation,replacement){
   if(isCSVTranslation){
 
     savedString = replacement
-    let tempEncode = savedString.toString("utf8")
-    listWidget.currentItem().setText(tempEncode)
+    listWidget.currentItem().setText(savedString.toString("utf8"))
     
   }else{
     currentItemBackup = listWidget.currentItem().text()
@@ -803,7 +802,7 @@ function saveProgress(isCSVTranslation,replacement){
     }
     oldRawString =  rawStrings[listWidget.currentRow()]
   }
-  
+
   rawStrings[listWidget.currentRow()] = savedString
   extractedStrings = Buffer.concat(rawStrings)
 
@@ -849,19 +848,43 @@ function saveProgress(isCSVTranslation,replacement){
     listWidget.item(listWidget.currentRow()).setText(rawStrings[listWidget.currentRow()].toString("utf8"))
     stringEditorTextEdit.setPlainText(rawStrings[listWidget.currentRow()].toString("utf8"))
     extractedStrings = Buffer.concat(rawStrings)
-  }else {
+  }else if(!pointersTableModeON&&
+    extractedStrings.length>originalExtractedStringsLength){
+    
+    let bytesToDelete = extractedStrings.length-extractedStringsOLD.length
+    let i = rawStrings.length-1
+    while(bytesToDelete>0&&spaceLeftInSection>0&&rawStrings[i]){
+      let k = rawStrings[i].length-1
 
-    if(pointersTableModeON===false){
-      while(extractedStrings.length>originalExtractedStringsLength){
-        extractedStrings = extractedStrings.slice(0,-1)
-        if(extractedStrings.length===originalExtractedStringsLength){
-          extractedStrings = extractedStrings.slice(0,-1)
-          extractedStrings = Buffer.concat([extractedStrings,newBuffer])
+      while(k>1&&bytesToDelete>0&&spaceLeftInSection>0){
+        if(rawStrings[i][k]===0&&rawStrings[i][k-1]===0){
+          rawStrings[i] = rawStrings[i].subarray(0,k)
+          bytesToDelete--
+          spaceLeftInSection--
+          k--
+        }else{
+          break
         }
       }
-    }else{
-      //while(){}
+      i--
     }
+    i = rawStrings.length-1
+    while(bytesToDelete>0){
+      let k = rawStrings[i].length-1
+      while(k>1&&bytesToDelete>0){
+        if(rawStrings[i][k]===0&&rawStrings[i][k-1]!==0&&rawStrings[i][k-2]!==0){
+          rawStrings[i] = Buffer.concat([rawStrings[i].subarray(0,k-1),newBuffer])
+          bytesToDelete--
+          k--
+        }else{
+          break
+        }
+      }
+      listWidget.item(i).setText(rawStrings[i].toString("utf8"))
+      i--
+    }
+    extractedStrings = Buffer.concat(rawStrings)
+    oldRawStrings = structuredClone(rawStrings)
   }
 
   while(extractedStrings.length<extractedStringsOLD.length){
@@ -963,11 +986,9 @@ function saveProgress(isCSVTranslation,replacement){
   if(pointersTableModeON===true){
     pointersTableUpdater()
     spaceLeftFunc(extractedStrings)
+    const lastStringPosition = parseInt(offsetOfEachString[offsetOfEachString.length-1],16)
+    rawStrings[rawStrings.length-1] = currentContent.subarray(lastStringPosition,lastStringOffsetInDecimal)
   }
-  //This will be useful when using saveProgress again
-  //last rawString will be updated to add the 00
-  const lastStringPosition = parseInt(offsetOfEachString[offsetOfEachString.length-1],16)
-  rawStrings[rawStrings.length-1] = currentContent.subarray(lastStringPosition,lastStringOffsetInDecimal)
 
   fs.writeFileSync(`${selectedFile}`,currentContent,{
     encoding: "binary",
