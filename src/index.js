@@ -90,7 +90,6 @@ let currentTableContent = []
 let organizedSections = []
 let oldSelectedTablePointers = []
 let stringsOffset = 0
-let stringsOldOffset = 0
 let shiftJISEncoding = false
 let UTF8Encoding = true
 let originalExtractedStringsLength = 0
@@ -111,7 +110,6 @@ let oldTableModeMasterDataObj
 let totalDeletedBytes
 let sectionedCurrentContentLength = 0
 //let tablePointersIndexPositions
-let oldRawStrings = []
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -414,7 +412,6 @@ function processStrings() {
     
     listWidget.addItem(new QListWidgetItem(text));
   }
-  oldRawStrings = structuredClone(rawStrings)
   extractedStringsOLD = Buffer.concat(rawStrings);
   originalExtractedStringsLength = extractedStringsOLD.length;
 }
@@ -476,8 +473,12 @@ function stringOffsetFunc(data){
     phase = 1;
     firstLetterFound= true
   }
-  lastStringOffsetInDecimal = parseInt(lastStringOffsetLineEdit.text(), 16)
-const parseEnd = lastStringOffsetInDecimal
+  lastStringOffsetInDecimal = fileSizeMenuAction2NoKeepSize.isChecked()?
+  parseInt(lastStringOffsetLineEdit.text(), 16)+extractedStrings.length-originalExtractedStringsLength:
+  parseInt(lastStringOffsetLineEdit.text(), 16)
+  lastStringOffsetLineEdit.setText(lastStringOffsetInDecimal.toString(16).toUpperCase())
+  
+  const parseEnd = lastStringOffsetInDecimal
 
   while(i != parseEnd){
     
@@ -652,40 +653,37 @@ function stringOffsetFuncWithoutPointers(data,start,end){
 
 //Determines all the space left that can be edited by analyzing the amount of 00 that 
 //are in the specified section of the file, or the entire file if is a pointers table.
-function spaceLeftFunc(stringsData){
+function spaceLeftFunc(extractedStringsData){
   spaceLeftInSection = 0
   let i = 0
 
-  if(pointersTableModeON===false){
-
-    while(stringsData[i] != undefined){
-  
-      if(stringsData[i] === 0&&stringsData[i+1] === 0){
-        spaceLeftInSection= spaceLeftInSection+1
-      }
-      i=i+1
+  while(extractedStringsData[i] != undefined){
+    if(extractedStringsData[i] === 0&&extractedStringsData[i+1] === 0){
+      spaceLeftInSection= spaceLeftInSection+1
     }
+    i=i+1
+  }
+
+  if(!pointersTableModeON){
     spaceLeftLabel.setText(`Space left: ${spaceLeftInSection}`)
-  }else if(pointersTableModeON===true){
+    return
+  }
+
+  let globalSpaceLeftInSection = 0
+  for(i=0;globalExtractedStrings[i];i++){
+    const currentSectionIndex = Number(sectionNameNumber.text())-1
+    if(i===currentSectionIndex) continue
+    
     let k = 0;
-    while(globalExtractedStrings[k]!=undefined){
-      i = 0
-      while(globalExtractedStrings[k][i] != undefined){
-  
-        if(globalExtractedStrings[k][i] === 0){
-          spaceLeftInSection= spaceLeftInSection+1
-        }
-        i=i+1
+    
+    while(globalExtractedStrings[i][k] != undefined){
+      if(globalExtractedStrings[i][k] === 0&&globalExtractedStrings[i][k+1]===0){
+        globalSpaceLeftInSection= globalSpaceLeftInSection+1
       }
       k=k+1;
     }
-    i = 0
-    while(globalOffsetOfEachString[i]!=undefined){
-      spaceLeftInSection = spaceLeftInSection -globalOffsetOfEachString[i].length
-      i=i+1
-    }
-    spaceLeftLabel.setText(`Global Space Left: ${spaceLeftInSection+1}`)
   }
+  spaceLeftLabel.setText(`Space left in section: ${spaceLeftInSection} (Global ${spaceLeftInSection+globalSpaceLeftInSection})`)
 }
 
 //Saves the offset of each pointer to be used later.
@@ -884,7 +882,6 @@ function saveProgress(isCSVTranslation,replacement){
       i--
     }
     extractedStrings = Buffer.concat(rawStrings)
-    oldRawStrings = structuredClone(rawStrings)
   }
 
   while(extractedStrings.length<extractedStringsOLD.length){
@@ -1293,7 +1290,6 @@ function setDefaultValues(options){
 
   hiddenPointers = 0
   stringsOffset = 0
-  stringsOldOffset = 0
 
   listWidget.clear()
   listWidget.scrollToTop()
@@ -1323,7 +1319,7 @@ function setDefaultValues(options){
   spaceLeftLabel.setText(`Space left: N/A`)
   pointerValuesLabel.setText(`Pointer HexValues: N/A`)
   pointerOffsetLabel.setText("Pointer Offset: N/A")
-  stringOffsetLabel.setText(`String Offset: File/"RAM" (Not accurate)`)
+  stringOffsetLabel.setText(`String Offset: Offset/"RAM Address" (For MHG)`)
   pointersViewerTitleLabel.setText(`Pointers Viewer (Total) (Shared)`)
   choosedCharacters.setText("")
   searchLineEdit.setText("")
@@ -1388,7 +1384,7 @@ function loadConfiguration() {
     filePathQLineEditRead.setText(sectionConfig.filePath || "");
 
     selectedFile = sectionConfig.filePath || "";
-    sectionNameHeader = sectionConfig.sectionName || "Section name:";
+    sectionNameHeader = sectionConfig.sectionName || "File Section Name:";
     sectionDetailsLabel.setText(`${sectionNameHeader}: String#N/A`);
     
     if (sectionConfig.encoding === "UTF8"){
@@ -3629,6 +3625,8 @@ function getPointersTableData(){
     lastPointerTableOffsetLineEdit.setText("58")
   }else if(pointersTableSectionNameLineEdit.text()==="tunnel"){
     lastPointerTableOffsetLineEdit.setText("08")
+  }else if(pointersTableSectionNameLineEdit.text()==="village"){
+    lastPointerTableOffsetLineEdit.setText("C0")
   }
 
   //MHP3rd Preloaded Pointers Tables Configurations
@@ -4034,56 +4032,43 @@ function getOrganizedSectionsData() {
   if(!sectionChangeInProcess) getStringsAndPointersMasterDataObj()
 }
 
-function getStringsAndPointersMasterDataObj(){
-  let i = 0
-  let k = 0
-  tableModeMasterDataObj = new Array(sectionedCurrentContent.length).fill().map(() => [])
 
-  for(i=0, k = 0;i<=sectionedCurrentContent.length-1;k++){
-    const pointerBuffer = sectionedCurrentContent[i].subarray(k*4,4*(k+1))
-    let pointerDecimals = false
-    if(pointerBuffer.length===4){
-      pointerDecimals = bigEndian.isChecked()? pointerBuffer.readUInt32BE(0,4) : pointerBuffer.readUInt32LE(0,4)
-    }
+//Optimized extraction and mapping of pointer pairs and their corresponding strings 
+//from sectioned content, validating bounds, eliminating duplicates via a Set, 
+//and calculating absolute positions based on the configured Endianness
+function getStringsAndPointersMasterDataObj() {
+  tableModeMasterDataObj = new Array(sectionedCurrentContent.length).fill().map(() => []);
 
-    if(pointerDecimals && pointerDecimals>currentContent.length||pointerBuffer.length<4){
-      i = i+1
-      k=-1
-    }else{
-      let nextZeroByte = 0
-      
-      while (nextZeroByte < sectionedCurrentContent[i].length && sectionedCurrentContent[i][nextZeroByte+pointerDecimals] != 0) {
-        nextZeroByte++;
-      }
+  for (let i = 0; i < sectionedCurrentContent.length; i++) {
+    const section = sectionedCurrentContent[i];
+    const seenPointers = new Set();
 
-      const stringBuffer = sectionedCurrentContent[i].subarray(pointerDecimals,nextZeroByte+pointerDecimals)
-      const stringPosition = bigEndian.isChecked()?
-      Buffer.from(selectedTablePointers[i],"hex").readUint32BE(0)+ pointerDecimals:
-      Buffer.from(selectedTablePointers[i],"hex").readUint32LE(0)+ pointerDecimals
+    const basePtrHex = selectedTablePointers[i];
+    const basePtrBuf = Buffer.from(basePtrHex, "hex");
+    const basePtrVal = bigEndian.isChecked() ? basePtrBuf.readUint32BE(0) : basePtrBuf.readUint32LE(0);
 
-      const pointerPosition = bigEndian.isChecked()?
-      Buffer.from(selectedTablePointers[i],"hex").readUint32BE(0)+ k*4:
-      Buffer.from(selectedTablePointers[i],"hex").readUint32LE(0)+ k*4
-      
-      let duplicatedPointerDoSkip = false
-      for(let s =0;tableModeMasterDataObj[i][k-1-s];s++){
-        if (Buffer.compare(tableModeMasterDataObj[i][k-1-s]["pointerBuffer"],pointerBuffer)===0){
-          duplicatedPointerDoSkip = true
-        }
-      }
+    for (let k = 0; k * 4 + 4 <= section.length; k++) {
+      const pointerBuffer = section.subarray(k * 4, k * 4 + 4);
+      const pointerDecimals = bigEndian.isChecked() ? pointerBuffer.readUInt32BE(0) : pointerBuffer.readUInt32LE(0);
 
-      if(duplicatedPointerDoSkip) continue
+      if (pointerDecimals > currentContent.length) break;
+
+      const ptrHex = pointerBuffer.toString('hex');
+      if (seenPointers.has(ptrHex)) continue;
+      seenPointers.add(ptrHex);
+
+      let endOfString = section.indexOf(0, pointerDecimals);
+      if (endOfString === -1) endOfString = section.length; 
 
       tableModeMasterDataObj[i].push({
-        stringBuffer:stringBuffer,
-        stringPosition: stringPosition,
-        pointerBuffer:pointerBuffer,
-        pointerPosition: pointerPosition,
-      })
+        stringBuffer: section.subarray(pointerDecimals, endOfString),
+        stringPosition: basePtrVal + pointerDecimals,
+        pointerBuffer: pointerBuffer,
+        pointerPosition: basePtrVal + (k * 4),
+      });
     }
-    oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj)
   }
-  //console.log(tableModeMasterDataObj)
+  oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj);
 }
 
 //globalExtractedStrings and globalOffsetOfEachString are needed to calculate
@@ -4210,7 +4195,6 @@ function removePointersTable(){
 function pointersTableUpdater(){
   let i = 0
   //For the pointers table mode.
-  if(extractedStrings.length>originalExtractedStringsLength){
 
     stringsOffset = extractedStrings.length-originalExtractedStringsLength
     i=0
@@ -4230,10 +4214,10 @@ function pointersTableUpdater(){
       let finalValue;
 
       if(bigEndian.isChecked()) {
-        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntBE(0, 4) + stringsOffset - stringsOldOffset;
+        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntBE(0, 4) + stringsOffset;
         tempBuf.writeUIntBE(finalValue, 0, 4);
       }else{
-        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntLE(0, 4) + stringsOffset - stringsOldOffset;
+        finalValue = Buffer.from(selectedTablePointers[i], "hex").readIntLE(0, 4) + stringsOffset;
         tempBuf.writeUIntLE(finalValue, 0, 4);
       }
       selectedTablePointers[i] = tempBuf.toString("hex").toUpperCase();
@@ -4259,10 +4243,6 @@ function pointersTableUpdater(){
     } 
     i = 0
 
-    if(fileSizeMenuAction2NoKeepSize.isChecked()){
-      lastStringOffsetLineEdit.setText((parseInt(lastStringOffsetLineEdit.text(),16)+stringsOffset - stringsOldOffset).toString(16))
-    }
-
     const start = parseInt(firstPointersTableOffsetLineEdit.text(), 16);
     const end = parseInt(lastPointersTableOffsetLineEdit.text(), 16);
     const extractedTablePointers = Buffer.concat(extractedTablePointersIn4);
@@ -4274,7 +4254,6 @@ function pointersTableUpdater(){
     ]);
 
     originalExtractedStringsLength = currentContent.slice(firstStringOffsetInDecimal, parseInt(lastStringOffsetLineEdit.text(),16)).length
-  }
   
   getSectionedCurrentContent()
   if(getOrganizedSectionsData()===1){
@@ -4287,10 +4266,6 @@ function pointersTableUpdater(){
     return
   }
   getGlobalExtractedStrings()
-
-  if(fileSizeMenuAction2NoKeepSize.isChecked()){
-    stringsOldOffset = stringsOffset
-  }
 
   if(csvInfoGatheringMode===false||csvTranslationMode===true){
     saveTableConfiguration()
@@ -4789,7 +4764,7 @@ function checkEncryption(filePath) {
  * - MHP1/MHP2/MHP3: Multiple tables (up to 7), different start positions per game
  * - MHTri: Uses OMOM header, reads pointer count from offset 4
  * 
- * Also handles encoding (Shift-JIS vs UTF-8) based on game/region.
+ * Also handles encoding (Shift-JIS or UTF-8) based on game/region.
  * 
  * @returns {Promise<void>}
  */
@@ -5157,10 +5132,10 @@ const mainMenuAction8 = new QAction();
 
 mainMenu.setTitle("Menu")
 mainMenuAction1.setText('Load file');
-mainMenuAction2.setText('Load Pointers Table');
+mainMenuAction2.setText('Load Pointers Table (MH2/P3)');
 mainMenuAction3.setText('Create a Pointers Table for this file');
 mainMenuAction4.setText('Open all .mib files in folder');
-mainMenuAction5.setText('Align two csv by rows');
+mainMenuAction5.setText('Align two .csv by rows');
 mainMenuAction6.setText('Create .csv file');
 mainMenuAction7.setText("About");
 mainMenuAction8.setText('Exit');
