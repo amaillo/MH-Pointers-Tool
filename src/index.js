@@ -110,6 +110,7 @@ let oldTableModeMasterDataObj
 let totalDeletedBytes
 let sectionedCurrentContentLength = 0
 //let tablePointersIndexPositions
+let globalSpaceLeftInSection
 
 //Take the text on the "Search..." square and use it to find matches, then saves the position of matched strings in matchSearch.
 function saveItemsInArr(textToSearch){
@@ -669,7 +670,7 @@ function spaceLeftFunc(extractedStringsData){
     return
   }
 
-  let globalSpaceLeftInSection = 0
+  globalSpaceLeftInSection = 0
   for(i=0;globalExtractedStrings[i];i++){
     const currentSectionIndex = Number(sectionNameNumber.text())-1
     if(i===currentSectionIndex) continue
@@ -703,7 +704,6 @@ function pointerOffsetFunc(){
 //Determines the pointers that must be edited by comparing the new ones with the old ones.
 function hexValuesFunc() {
   let i = 1;
-  let phase = 0;
   const marker = Buffer.from("5B506F743474305D", "hex"); // [POT4T0]
 
   //Comparison and update of pointers
@@ -716,7 +716,6 @@ function hexValuesFunc() {
       for (let s = 0; extractedPointersIn4[s] !== undefined; s++) {
         if (Buffer.compare(extractedPointersIn4[s], oldPtrRaw) === 0) {
           extractedPointersIn4[s] = Buffer.from(combinedPtr);
-          phase = 1;
         }
       }
     }
@@ -805,29 +804,33 @@ function saveProgress(isCSVTranslation,replacement){
   extractedStrings = Buffer.concat(rawStrings)
 
   const end = parseInt(lastStringOffsetLineEdit.text(), 16);
-
-  if(extractedStrings.length>extractedStringsOLD.length&&
+  //00 Deleter for pointers table mode in keep mode
+  const currentGlobalExLength = globalExtractedStrings[Number(sectionNameNumber.text())-1].length
+  if(extractedStrings.length>currentGlobalExLength&&
     pointersTableModeON===true&&
-    fileSizeMenuAction1.isChecked()){
+    fileSizeMenuAction1Keep.isChecked()){
 
     let countHowMany00 = 0
     let i = end
+    let howMuchDeleted = 0
     while(currentContent[i-1]===0){
       countHowMany00++
       i--
     }
     i = 0
-    let bytesToDelete = extractedStrings.length-extractedStringsOLD.length
-    while(countHowMany00>1&&bytesToDelete>0){
+    let zerosToDelete = extractedStrings.length-currentGlobalExLength
+    while(countHowMany00>1&&zerosToDelete>0){
       const lastRawString = rawStrings.length-1
       rawStrings[lastRawString] = rawStrings[lastRawString].subarray(0,rawStrings[lastRawString].length-i-1)
-      bytesToDelete--
+      zerosToDelete--
       countHowMany00--
+      howMuchDeleted++
     }
-    //if(countHowMany00>2){    }
-    extractedStrings = Buffer.concat(rawStrings)
 
-    extractedStringsOLD = Buffer.concat(rawStrings)
+    tableModeMasterDataObj[Number(sectionNameNumber.text())-1].forEach(item=>{
+      item["stringPosition"] = item["stringPosition"] + howMuchDeleted
+    })
+    extractedStrings = Buffer.concat(rawStrings)
   }
 
 
@@ -884,10 +887,13 @@ function saveProgress(isCSVTranslation,replacement){
     extractedStrings = Buffer.concat(rawStrings)
   }
 
-  while(extractedStrings.length<extractedStringsOLD.length){
+  while(extractedStrings.length<extractedStringsOLD.length||
+    pointersTableModeON&&
+    (extractedStrings.length<currentGlobalExLength
+      &&fileSizeMenuAction1Keep.isChecked()
+    )){
 
     extractedStrings = Buffer.concat([extractedStrings,newBuffer])
-    // console.log("Adding 00 to extractedStrings" + ` ${String(extractedStrings.length-extractedStringsOLD.length)}`)
   }
 
   const start = firstStringOffsetInDecimal;
@@ -902,15 +908,14 @@ function saveProgress(isCSVTranslation,replacement){
 
   if(pointersTableModeON===true &&
     currentContent.length>oldcurrentContentLength&&
-    fileSizeMenuAction1.isChecked()===true){
+    fileSizeMenuAction1Keep.isChecked()===true){
 
     const currentSectionIndex = Number(sectionNameNumber.text())-1
-    const maxAvailableSpace = getMaxAvailableSpace()
+    const maxAvailableSpace = getMaxAvailableSpace() +spaceLeftInSection
     const savedStringLength = savedString.length-1
     let lastStringData = getLast2CharaString()
-    const isCurrentRowAndSection = lastStringData.mainIndex===currentSectionIndex&&lastStringData.secondaryIndex===listWidget.currentRow()
     
-    if(savedStringLength>maxAvailableSpace&&!isCurrentRowAndSection){
+    if(savedStringLength>maxAvailableSpace){
       
       tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,maxAvailableSpace)
       savedString = Buffer.concat([savedString.subarray(0,maxAvailableSpace),Buffer.alloc(1)])
@@ -1014,7 +1019,7 @@ function getMaxAvailableSpace(){
   //newpass = []
   let doBreak = false
   for(let i = sectionedCurrentContent.length - 1; i >= currentSection; i--) {
-    for(let k = tableModeMasterDataObj[i].length - 1; k >= currentRow; k--) {
+    for(let k = tableModeMasterDataObj[i].length - 1;k>=0; k--) {
       counter = counter+tableModeMasterDataObj[i][k]["stringBuffer"].length-1
       //newpass.push(tableModeMasterDataObj[i][k]["stringBuffer"])
       
@@ -3961,7 +3966,7 @@ function getSectionedCurrentContent(){
 //Uses the data from getSectionedCurrentContent() to get their pointers and string offsets
 function getOrganizedSectionsData() {
   const isBigEndian = bigEndian.isChecked();
-  const isFileSizeMenuAction1 = fileSizeMenuAction1.isChecked();
+  const isFileSizeMenuAction1 = fileSizeMenuAction1Keep.isChecked();
   const isFileSizeMenuAction2 = fileSizeMenuAction2NoKeepSize.isChecked();
   const selectedPointers = selectedTablePointers;
   let i = 0;
@@ -4166,8 +4171,8 @@ function removePointersTable(){
   mainMenuAction1.setText("Load file")
   mainMenuAction3.setEnabled(true)
   fileSizeMenu.setEnabled(false)
-  fileSizeMenuAction1.setChecked(true)
-  fileSizeMenuAction1.setEnabled(false)
+  fileSizeMenuAction1Keep.setChecked(true)
+  fileSizeMenuAction1Keep.setEnabled(false)
   fileSizeMenuAction2NoKeepSize.setChecked(false)
   fileSizeMenuAction2NoKeepSize.setEnabled(true)
 
@@ -4323,17 +4328,17 @@ function fileSize(options){
   
   if(options===0){
 
-    if(fileSizeMenuAction1.isChecked()===true){
+    if(fileSizeMenuAction1Keep.isChecked()===true){
       fileSizeMenuAction2NoKeepSize.setChecked(false)
       fileSizeMenuAction2NoKeepSize.setEnabled(true)
-      fileSizeMenuAction1.setEnabled(false)
+      fileSizeMenuAction1Keep.setEnabled(false)
       fileSizeMenu.setTitle("File Size: Keep")
     }
   }else{
 
     if(fileSizeMenuAction2NoKeepSize.isChecked()===true){
-      fileSizeMenuAction1.setChecked(false)
-      fileSizeMenuAction1.setEnabled(true)
+      fileSizeMenuAction1Keep.setChecked(false)
+      fileSizeMenuAction1Keep.setEnabled(true)
       fileSizeMenuAction2NoKeepSize.setEnabled(false)
       fileSizeMenu.setTitle("File Size: Don't keep")
     }
@@ -5172,16 +5177,16 @@ const fileSizeMenu = new QMenu()
 fileSizeMenu.setDisabled(true)
 fileSizeMenu.setTitle("File size: Keep")
 fileSizeMenu.setToolTip("Maintain the file size when a string is overwritten by a bigger one.\nBy default is keep.")
-const fileSizeMenuAction1 = new QAction();
+const fileSizeMenuAction1Keep = new QAction();
 const fileSizeMenuAction2NoKeepSize = new QAction();
 
-fileSizeMenu.addAction(fileSizeMenuAction1) 
+fileSizeMenu.addAction(fileSizeMenuAction1Keep) 
 fileSizeMenu.addAction(fileSizeMenuAction2NoKeepSize)
 
-fileSizeMenuAction1.setText('Keep');
-fileSizeMenuAction1.setCheckable(true)
-fileSizeMenuAction1.setChecked(true)
-fileSizeMenuAction1.setEnabled(false)
+fileSizeMenuAction1Keep.setText('Keep');
+fileSizeMenuAction1Keep.setCheckable(true)
+fileSizeMenuAction1Keep.setChecked(true)
+fileSizeMenuAction1Keep.setEnabled(false)
 
 fileSizeMenuAction2NoKeepSize.setText("Don't keep");
 fileSizeMenuAction2NoKeepSize.setCheckable(true)
@@ -5219,7 +5224,7 @@ encodingMenuAction2.addEventListener("triggered",function () {setShiftJISEncodin
 
 
 //file size
-fileSizeMenuAction1.addEventListener("triggered",function () {fileSize(0)})
+fileSizeMenuAction1Keep.addEventListener("triggered",function () {fileSize(0)})
 fileSizeMenuAction2NoKeepSize.addEventListener("triggered",function () {fileSize(1)})
 
 //Open all .mib strings in folder
