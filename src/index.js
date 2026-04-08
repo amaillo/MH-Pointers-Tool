@@ -759,9 +759,10 @@ function pointerAdjuster(data){
   }
 }
 
-//Save your progress when edit a string.
-//Before make the saves does some modifications to add or remove data to ensure that the defined
-//area of strings that will be edited don't be bigger or lesser than the original one on the original file.
+// Saves the edited string and updates the buffer structure.
+// Before saving, it adjusts data length (adding/removing null bytes or truncating)
+// to ensure the edited block size matches the original bounds, 
+// preventing corruption and updating pointers if Table Mode is active.
 function saveProgress(isCSVTranslation,replacement){
   if(isCSVTranslation){
 
@@ -886,12 +887,12 @@ function saveProgress(isCSVTranslation,replacement){
     }
     extractedStrings = Buffer.concat(rawStrings)
   }
-
-  while(extractedStrings.length<extractedStringsOLD.length||
+  //Fill with 00
+  while(extractedStrings.length<extractedStringsOLD.length&&!pointersTableModeON||
     pointersTableModeON&&
     (extractedStrings.length<currentGlobalExLength
-      &&fileSizeMenuAction1Keep.isChecked()
-    )){
+      &&fileSizeMenuAction1Keep.isChecked())
+    ){
 
     extractedStrings = Buffer.concat([extractedStrings,newBuffer])
   }
@@ -956,7 +957,6 @@ function saveProgress(isCSVTranslation,replacement){
       const bufferToCheck = tableModeMasterDataObj[lastStringData.mainIndex][lastStringData.secondaryIndex]["stringBuffer"]
       const pointerToCheck = tableModeMasterDataObj[lastStringData.mainIndex][lastStringData.secondaryIndex]["pointerBuffer"]
       
-      //Cut the unneeded part of the "last" string remembe to check duplicated
       tableModeMasterDataObj[lastStringData.mainIndex].forEach((item,index)=>{
 
         if(bufferToCheck.equals(item.stringBuffer)&&pointerToCheck.equals(item.pointerBuffer)){
@@ -967,7 +967,6 @@ function saveProgress(isCSVTranslation,replacement){
       if(lastStringData.mainIndex>currentSectionIndex){
         lastStringOffsetLineEdit.setText((parseInt(lastStringOffsetLineEdit.text(),16)+howMuchWillBeCutThisTime).toString(16).toUpperCase())
       }
-      //console.log(getMaxAvailableSpace())
       rebuildCurrentContentUsingMasterDataObj(tableModeMasterDataObj,oldTableModeMasterDataObj,lastStringData,sizeDiff)
       oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj)
     }
@@ -1009,6 +1008,9 @@ function saveProgress(isCSVTranslation,replacement){
     }
   })
 }
+
+///Calculates the total editable byte space
+//by using tableModeMasterDataObj content.
 //let newpass = [] debug
 //let oldpass = []
 function getMaxAvailableSpace(){
@@ -1032,9 +1034,15 @@ function getMaxAvailableSpace(){
   }
   
   return counter+1
-  //-tableModeMasterDataObj[currentSection].length
 }
 
+/**
+* Rebuilds the main buffers after modifying a string.
+* 1. Calculates the size difference (sizeDiff) and shifts the remaining data using Buffer.concat.
+* 2. Iterates in reverse over the sections and pointers to avoid offset mismatches in memory.
+* 3. Recalculates and rewrites the offsets of all pointers after the change, respecting endianness.
+* 4. Adjusts the base addresses (selectedTablePointers) of each section to reflect the added or deleted bytes.
+*/
 function rebuildCurrentContentUsingMasterDataObj(fullData,oldFullData,modifiedStringIndexes,sizeDiff){
   if(pointersTableModeON){
     const lastSectionsNumber = sectionedCurrentContentLength
@@ -3603,7 +3611,7 @@ function getPointersTableData(){
 
   createPointersDialogLayout.addWidget(createPointersTableButton)
 
-  postLastStringOffsetLineEdit.setText(((fs.readFileSync(`${selectedFile}`)).length-1).toString(16))
+  postLastStringOffsetLineEdit.setText(((fs.readFileSync(`${selectedFile}`)).length).toString(16))
   
   //MH2 Preloaded Pointers Tables Configurations
   if(pointersTableSectionNameLineEdit.text()==="armor"){
