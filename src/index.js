@@ -806,7 +806,9 @@ function saveProgress(isCSVTranslation,replacement){
 
   const end = parseInt(lastStringOffsetLineEdit.text(), 16);
   //00 Deleter for pointers table mode in keep mode
-  const currentGlobalExLength = globalExtractedStrings[Number(sectionNameNumber.text())-1].length
+  const currentGlobalExLength = pointersTableModeON?
+  globalExtractedStrings[Number(sectionNameNumber.text())-1].length:
+  0
   if(extractedStrings.length>currentGlobalExLength&&
     pointersTableModeON===true&&
     fileSizeMenuAction1Keep.isChecked()){
@@ -3890,7 +3892,6 @@ function loadPTConfiguration(){
     lastPointerOffsetLineEdit.setText(tableEndPointerStartStringFileOffsets[Number(sectionNameNumber.text())-1])
     firstStringOffsetLineEdit.setText(tableEndPointerStartStringFileOffsets[Number(sectionNameNumber.text())-1])
     lastStringOffsetLineEdit.setText(tableEndStringFileOffsets[Number(sectionNameNumber.text())-1])
-    
  
     extractedTablePointersRaw = currentContent.slice(parseInt(firstPointersTableOffsetLineEdit.text(),16),parseInt(lastPointersTableOffsetLineEdit.text(),16))
     
@@ -3997,7 +3998,7 @@ function getOrganizedSectionsData() {
       //Process end string offsets
       if (selectedPointers[i + 1] !== undefined) {
         const nextPointerBuffer = Buffer.from(selectedPointers[i + 1], "hex");
-        tableEndStringFileOffsets[i] = nextPointerBuffer[readMethod](0, nextPointerBuffer.length).toString(16).toUpperCase();
+        tableEndStringFileOffsets[i] = (nextPointerBuffer[readMethod](0, nextPointerBuffer.length)+globalOffset).toString(16).toUpperCase();
       } else {
         if (isFileSizeMenuAction1 || savedString === "") {
           tableEndStringFileOffsets[i] = postLastStringOffset;
