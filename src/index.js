@@ -806,9 +806,7 @@ function saveProgress(isCSVTranslation,replacement){
 
   const end = parseInt(lastStringOffsetLineEdit.text(), 16);
   //00 Deleter for pointers table mode in keep mode
-  const currentGlobalExLength = pointersTableModeON?
-  globalExtractedStrings[Number(sectionNameNumber.text())-1].length:
-  0
+  const currentGlobalExLength = pointersTableModeON?globalExtractedStrings[Number(sectionNameNumber.text())-1].length:0
   if(extractedStrings.length>currentGlobalExLength&&
     pointersTableModeON===true&&
     fileSizeMenuAction1Keep.isChecked()){
@@ -4059,13 +4057,18 @@ function getStringsAndPointersMasterDataObj() {
 
     const basePtrHex = selectedTablePointers[i];
     const basePtrBuf = Buffer.from(basePtrHex, "hex");
-    const basePtrVal = bigEndian.isChecked() ? basePtrBuf.readUint32BE(0) : basePtrBuf.readUint32LE(0);
+    
+    const basePtrVal = bigEndian.isChecked() ?
+      basePtrBuf.readUint32BE(0) :
+      basePtrBuf.readUint32LE(0);
 
-    const firstPtrBuf = section.subarray(0, 4);
+    const firstPtrBuf = section.subarray(globalOffset, 4 + globalOffset);
     const stringDataStart = bigEndian.isChecked() ? firstPtrBuf.readUInt32BE(0) : firstPtrBuf.readUInt32LE(0);
 
-    for (let k = 0; k * 4 + 4 <= stringDataStart; k++) {
-      const pointerBuffer = section.subarray(k * 4, k * 4 + 4);
+    for (let k = 0; k * 4 + (k + 1) * globalOffset + 4 <= stringDataStart; k++) {
+      const relPos = k * 4 + (k + 1) * globalOffset;
+
+      const pointerBuffer = section.subarray(relPos, relPos + 4);
       const pointerDecimals = bigEndian.isChecked() ? pointerBuffer.readUInt32BE(0) : pointerBuffer.readUInt32LE(0);
 
       if (pointerDecimals > section.length) break;
@@ -4073,7 +4076,7 @@ function getStringsAndPointersMasterDataObj() {
       const ptrHex = pointerBuffer.toString('hex');
       if (seenPointers.has(ptrHex)) continue;
 
-      //Overlap detector
+      // Overlap detector
       let isOverlap = false;
       for (let j = 0; j < tableModeMasterDataObj[i].length; j++) {
         const existing = tableModeMasterDataObj[i][j];
@@ -4084,7 +4087,7 @@ function getStringsAndPointersMasterDataObj() {
           if (!existing.overlappingPointers) existing.overlappingPointers = [];
           existing.overlappingPointers.push({
             pointerBuffer: pointerBuffer,
-            pointerPosition: basePtrVal + (k * 4),
+            pointerPosition: basePtrVal + relPos,
             offsetInside: pointerDecimals - startOffset
           });
           seenPointers.set(ptrHex, true);
@@ -4103,7 +4106,7 @@ function getStringsAndPointersMasterDataObj() {
         stringBuffer: section.subarray(pointerDecimals, endOfString),
         stringPosition: basePtrVal + pointerDecimals,
         pointerBuffer: pointerBuffer,
-        pointerPosition: basePtrVal + (k * 4),
+        pointerPosition: basePtrVal + relPos, 
         overlappingPointers: [] 
       });
     }
@@ -4112,7 +4115,6 @@ function getStringsAndPointersMasterDataObj() {
   }
   oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj);
 }
-
 //globalExtractedStrings and globalOffsetOfEachString are needed to calculate
 //accurately the space left when table pointers mode is ON
 function getGlobalExtractedStrings(){
