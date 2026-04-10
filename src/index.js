@@ -4046,29 +4046,54 @@ function getOrganizedSectionsData() {
 }
 
 
-//Optimized extraction and mapping of pointer pairs and their corresponding strings 
-//from sectioned content, validating bounds, eliminating duplicates via a Set, 
-//and calculating absolute positions based on the configured Endianness
+//Optimized pointer-string mapping: validates
+//bounds, removes duplicates, and calculates
+//absolute positions per Endianness.
 function getStringsAndPointersMasterDataObj() {
   tableModeMasterDataObj = new Array(sectionedCurrentContent.length).fill().map(() => []);
 
   for (let i = 0; i < sectionedCurrentContent.length; i++) {
     const section = sectionedCurrentContent[i];
-    const seenPointers = new Set();
+    const seenPointers = new Map();
 
     const basePtrHex = selectedTablePointers[i];
     const basePtrBuf = Buffer.from(basePtrHex, "hex");
     const basePtrVal = bigEndian.isChecked() ? basePtrBuf.readUint32BE(0) : basePtrBuf.readUint32LE(0);
 
-    for (let k = 0; k * 4 + 4 <= section.length; k++) {
+    const firstPtrBuf = section.subarray(0, 4);
+    const stringDataStart = bigEndian.isChecked() ? firstPtrBuf.readUInt32BE(0) : firstPtrBuf.readUInt32LE(0);
+
+    for (let k = 0; k * 4 + 4 <= stringDataStart; k++) {
       const pointerBuffer = section.subarray(k * 4, k * 4 + 4);
       const pointerDecimals = bigEndian.isChecked() ? pointerBuffer.readUInt32BE(0) : pointerBuffer.readUInt32LE(0);
 
-      if (pointerDecimals > currentContent.length) break;
+      if (pointerDecimals > section.length) break;
 
       const ptrHex = pointerBuffer.toString('hex');
       if (seenPointers.has(ptrHex)) continue;
-      seenPointers.add(ptrHex);
+
+      //Overlap detector
+      let isOverlap = false;
+      for (let j = 0; j < tableModeMasterDataObj[i].length; j++) {
+        const existing = tableModeMasterDataObj[i][j];
+        const startOffset = existing.stringPosition - basePtrVal;
+        const endOffset = startOffset + existing.stringBuffer.length;
+        
+        if (pointerDecimals > startOffset && pointerDecimals < endOffset) {
+          if (!existing.overlappingPointers) existing.overlappingPointers = [];
+          existing.overlappingPointers.push({
+            pointerBuffer: pointerBuffer,
+            pointerPosition: basePtrVal + (k * 4),
+            offsetInside: pointerDecimals - startOffset
+          });
+          seenPointers.set(ptrHex, true);
+          isOverlap = true;
+          break;
+        }
+      }
+
+      if (isOverlap) continue;
+      seenPointers.set(ptrHex, true);
 
       let endOfString = section.indexOf(0, pointerDecimals);
       if (endOfString === -1) endOfString = section.length; 
@@ -4078,8 +4103,11 @@ function getStringsAndPointersMasterDataObj() {
         stringPosition: basePtrVal + pointerDecimals,
         pointerBuffer: pointerBuffer,
         pointerPosition: basePtrVal + (k * 4),
+        overlappingPointers: [] 
       });
     }
+    
+    tableModeMasterDataObj[i].sort((a, b) => a.stringPosition - b.stringPosition);
   }
   oldTableModeMasterDataObj = structuredClone(tableModeMasterDataObj);
 }
