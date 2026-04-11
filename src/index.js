@@ -759,34 +759,50 @@ function pointerAdjuster(data){
   }
 }
 
+//Count how many null values exist at the end of a buffer
+function countHowManyEnd00(buffer,endindx){
+  let countHowMany00 = 0
+  while(buffer[endindx]===0){
+    countHowMany00++
+    endindx--
+  }
+  return countHowMany00
+}
+
 // Saves the edited string and updates the buffer structure.
 // Before saving, it adjusts data length (adding/removing null bytes or truncating)
 // to ensure the edited block size matches the original bounds, 
 // preventing corruption and updating pointers if Table Mode is active.
 function saveProgress(isCSVTranslation,replacement){
+  const currentRow = listWidget.currentRow()
+
   if(isCSVTranslation){
 
-  }else if(listWidget.currentRow() === -1||stringEditorTextEdit.toPlainText()===""){
+  }else if( currentRow === -1||stringEditorTextEdit.toPlainText()===""){
     return
   }
+
   let currentItemBackup
+  const currentItem = listWidget.currentItem()
+  const lastRawStringIndex = rawStrings.length-1
+  const currentSectionIndex = Number(sectionNameNumber.text())-1
+  
   if(isCSVTranslation){
 
     savedString = replacement
-    listWidget.currentItem().setText(savedString.toString("utf8"))
-    
+    currentItem.setText(savedString.toString("utf8"))
   }else{
-    currentItemBackup = listWidget.currentItem().text()
-    listWidget.currentItem().setText(stringEditorTextEdit.toPlainText())
+    currentItemBackup = currentItem.text()
+    currentItem.setText(stringEditorTextEdit.toPlainText())
 
     if(shiftJISEncoding===true){
-      const conversion = EncodingModule.convert(listWidget.currentItem().text(), {
+      const conversion = EncodingModule.convert(currentItem.text(), {
         to: 'SJIS',
         from: 'UNICODE',
       });
       savedString = Buffer.from(conversion, "binary")
     }else if(UTF8Encoding===true){
-      savedString = Buffer.from(listWidget.currentItem().text())
+      savedString = Buffer.from(currentItem.text())
     }
   }
 
@@ -794,41 +810,52 @@ function saveProgress(isCSVTranslation,replacement){
   savedString = Buffer.concat([savedString,newBuffer])
 
   if(firstPointerOffsetInDecimal=== ""){
-    while(rawStrings[listWidget.currentRow()].length>savedString.length){
+    while(rawStrings[currentRow].length>savedString.length){
 
       savedString = Buffer.concat([savedString,newBuffer])
     }
-    oldRawString =  rawStrings[listWidget.currentRow()]
   }
-
-  rawStrings[listWidget.currentRow()] = savedString
+  
+  oldRawString =  rawStrings[currentRow]
+  rawStrings[currentRow] = savedString
   extractedStrings = Buffer.concat(rawStrings)
+
+  let lastStringDifference = 0
+  if(globalOffset>0&&
+    currentRow===lastRawStringIndex){//If there were any extra 0 there, those were deleted...
+    const howMany00InRaw = countHowManyEnd00(rawStrings[currentRow],rawStrings[currentRow].length-1)
+    const howMany00InOldRaw = countHowManyEnd00(oldRawString,oldRawString.length-1)
+
+    lastStringDifference = howMany00InOldRaw-howMany00InRaw
+    while(lastStringDifference>0){
+      savedString = Buffer.concat([savedString,newBuffer])
+      lastStringDifference--
+    }
+    rawStrings[currentRow] = savedString
+    extractedStrings = Buffer.concat(rawStrings)
+  }
 
   const end = parseInt(lastStringOffsetLineEdit.text(), 16);
   //00 Deleter for pointers table mode in keep mode
-  const currentGlobalExLength = pointersTableModeON?globalExtractedStrings[Number(sectionNameNumber.text())-1].length:0
+  const currentGlobalExLength = pointersTableModeON?globalExtractedStrings[currentSectionIndex].length:0
   if(extractedStrings.length>currentGlobalExLength&&
     pointersTableModeON===true&&
     fileSizeMenuAction1Keep.isChecked()){
 
-    let countHowMany00 = 0
-    let i = end
+    let howMany00 = countHowManyEnd00(currentContent,end-1)
     let howMuchDeleted = 0
-    while(currentContent[i-1]===0){
-      countHowMany00++
-      i--
-    }
-    i = 0
+
+    let i = 0
     let zerosToDelete = extractedStrings.length-currentGlobalExLength
-    while(countHowMany00>1&&zerosToDelete>0){
-      const lastRawString = rawStrings.length-1
-      rawStrings[lastRawString] = rawStrings[lastRawString].subarray(0,rawStrings[lastRawString].length-i-1)
+    while(howMany00>1&&zerosToDelete>0){
+
+      rawStrings[lastRawStringIndex] = rawStrings[lastRawStringIndex].subarray(0,rawStrings[lastRawStringIndex].length-i-1)
       zerosToDelete--
-      countHowMany00--
+      howMany00--
       howMuchDeleted++
     }
 
-    tableModeMasterDataObj[Number(sectionNameNumber.text())-1].forEach(item=>{
+    tableModeMasterDataObj[currentSectionIndex].forEach(item=>{
       item["stringPosition"] = item["stringPosition"] + howMuchDeleted
     })
     extractedStrings = Buffer.concat(rawStrings)
@@ -836,25 +863,25 @@ function saveProgress(isCSVTranslation,replacement){
 
 
   if(firstPointerOffsetInDecimal=== ""){
-    while(rawStrings[listWidget.currentRow()].length>oldRawString.length){
+    while(rawStrings[currentRow].length>oldRawString.length){
       
-      rawStrings[listWidget.currentRow()] = rawStrings[listWidget.currentRow()].slice(0,-1)
+      rawStrings[currentRow] = rawStrings[currentRow].slice(0,-1)
   
-      if(rawStrings[listWidget.currentRow()].length===oldRawString.length){
+      if(rawStrings[currentRow].length===oldRawString.length){
         
-        rawStrings[listWidget.currentRow()] = rawStrings[listWidget.currentRow()].slice(0,-1)
-        rawStrings[listWidget.currentRow()] = Buffer.concat([rawStrings[listWidget.currentRow()],newBuffer])
+        rawStrings[currentRow] = rawStrings[currentRow].slice(0,-1)
+        rawStrings[currentRow] = Buffer.concat([rawStrings[currentRow],newBuffer])
       }
     }
 
-    listWidget.item(listWidget.currentRow()).setText(rawStrings[listWidget.currentRow()].toString("utf8"))
-    stringEditorTextEdit.setPlainText(rawStrings[listWidget.currentRow()].toString("utf8"))
+    listWidget.item(currentRow).setText(rawStrings[currentRow].toString("utf8"))
+    stringEditorTextEdit.setPlainText(rawStrings[currentRow].toString("utf8"))
     extractedStrings = Buffer.concat(rawStrings)
   }else if(!pointersTableModeON&&
     extractedStrings.length>originalExtractedStringsLength){
     
     let bytesToDelete = extractedStrings.length-extractedStringsOLD.length
-    let i = rawStrings.length-1
+    let i = lastRawStringIndex
     while(bytesToDelete>0&&spaceLeftInSection>0&&rawStrings[i]){
       let k = rawStrings[i].length-1
 
@@ -870,7 +897,7 @@ function saveProgress(isCSVTranslation,replacement){
       }
       i--
     }
-    i = rawStrings.length-1
+    i = lastRawStringIndex
     while(bytesToDelete>0){
       let k = rawStrings[i].length-1
       while(k>1&&bytesToDelete>0){
@@ -910,17 +937,16 @@ function saveProgress(isCSVTranslation,replacement){
   if(pointersTableModeON===true &&
     currentContent.length>oldcurrentContentLength&&
     fileSizeMenuAction1Keep.isChecked()===true){
-
-    const currentSectionIndex = Number(sectionNameNumber.text())-1
+      
     const maxAvailableSpace = getMaxAvailableSpace() +spaceLeftInSection
     const savedStringLength = savedString.length-1
     let lastStringData = getLast2CharaString()
     
     if(savedStringLength>maxAvailableSpace){
       
-      tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,maxAvailableSpace)
+      tableModeMasterDataObj[currentSectionIndex][currentRow]["stringBuffer"] = savedString.subarray(0,maxAvailableSpace)
       savedString = Buffer.concat([savedString.subarray(0,maxAvailableSpace),Buffer.alloc(1)])
-      rawStrings[listWidget.currentRow()] = savedString
+      rawStrings[currentRow] = savedString
       extractedStrings = Buffer.concat(rawStrings)
 
       currentContent = Buffer.concat([
@@ -929,14 +955,14 @@ function saveProgress(isCSVTranslation,replacement){
       currentContent.subarray(end+currentContent.length-oldcurrentContentLength)
       ]);
     }else{
-      tableModeMasterDataObj[currentSectionIndex][listWidget.currentRow()]["stringBuffer"] = savedString.subarray(0,savedString.length-1)
+      tableModeMasterDataObj[currentSectionIndex][currentRow]["stringBuffer"] = savedString.subarray(0,savedString.length-1)
     }
 
     let howMuchToCut = currentContent.length-oldcurrentContentLength
     const sizeDiff = currentContent.length-oldcurrentContentLength
     totalDeletedBytes = 0
 
-    if(howMuchToCut===0) listWidget.currentItem().setText(currentItemBackup)
+    if(howMuchToCut===0) currentItem.setText(currentItemBackup)
 
     while(howMuchToCut>0){
       lastStringData = getLast2CharaString()
@@ -988,7 +1014,7 @@ function saveProgress(isCSVTranslation,replacement){
     pointersTableUpdater()
     spaceLeftFunc(extractedStrings)
     const lastStringPosition = parseInt(offsetOfEachString[offsetOfEachString.length-1],16)
-    rawStrings[rawStrings.length-1] = currentContent.subarray(lastStringPosition,lastStringOffsetInDecimal)
+    rawStrings[lastRawStringIndex] = currentContent.subarray(lastStringPosition,lastStringOffsetInDecimal)
   }
 
   fs.writeFileSync(`${selectedFile}`,currentContent,{
@@ -3996,7 +4022,7 @@ function getOrganizedSectionsData() {
       //Process end string offsets
       if (selectedPointers[i + 1] !== undefined) {
         const nextPointerBuffer = Buffer.from(selectedPointers[i + 1], "hex");
-        tableEndStringFileOffsets[i] = (nextPointerBuffer[readMethod](0, nextPointerBuffer.length)+globalOffset).toString(16).toUpperCase();
+        tableEndStringFileOffsets[i] = (nextPointerBuffer[readMethod](0, nextPointerBuffer.length)).toString(16).toUpperCase();
       } else {
         if (isFileSizeMenuAction1 || savedString === "") {
           tableEndStringFileOffsets[i] = postLastStringOffset;
