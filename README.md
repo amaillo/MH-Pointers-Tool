@@ -94,7 +94,7 @@ You can find these offsets using any standard hex editor (like [MadEdit](https:/
 
   Optionally, you can also provide the start and end offsets for a pointer section that matches the strings. This allows you to edit strings more freely, as long as there's enough free space (extra null bytes) to expand them.
 
-  > **Note:** When using pointers, if there isn't enough free space (null bytes) left when saving, the last string will be truncated to keep the file size intact.
+  > **Note:** When using pointers, if there isn't enough free space (null bytes) left when saving, the last string with more than 2 characters will be truncated until have only 1. This is to keep the file size and the structure of pointers and strings intact (v1.2.0 and onwards).
 
 - **Strings and pointers editor**  
   The tool scans for null-separated strings and presents them in an editable list. You can also set a character limit per line to match in-game text box constraints.  
@@ -112,13 +112,15 @@ You can find these offsets using any standard hex editor (like [MadEdit](https:/
 - **Section naming**  
   Assign custom names to different string groups to keep your translation organized. Each "section" represents a region of the file. You have 255 sections for each settings file.
 
-- **CSV translation support**  
+- **CSV/Batch translation support**  
   Already have a spreadsheet with original and translated text?  
   The tool can import a UTF-8 `.csv` file (semicolon-separated, not commas) with two columns:  
   - Column 1: Translated text  
   - Column 2: Original text  
 
   Each string pair must be on the same row, with blank rows between different strings.
+  
+  > **Note:** With all the offset data set for every section to translate, a game could be translated totally with just a few clicks and a .csv file.
 
   **Example:**  
   <img alt="CSV example" src="./pngs/example1.png" height="280" />  
@@ -190,6 +192,10 @@ You can find these offsets using any standard hex editor (like [MadEdit](https:/
     > **Note for MHP3rd:** Some files require an additional **global offset** provided by the user. This is because the main pointer points to a series of 4 null values, so an extra offset is needed to correct the calculation.
 
     After filling in the required fields and continuing, a new window will appear. Here you must manually select the pointer(s) to be used. This creates a `.pt` (Pointers Table) file in the `MH-Pointers-Tool/Pointers Tables` folder. This file contains all the data related to the pointers table and will be loaded automatically in the future. You can also load it manually via **Menu > Load Pointers Table**.
+	
+	> **Note:** This mode has 2 ways of deciding what to do after editing a string.
+	*'Keep' mode: Will maintain the size of the file. If you delete any character, a null value (00) will be added at the end of the section. If you add any character, it will follow the behaviour of the standard mode.
+	*'Don't keep' mode: Will add or remove characters without maintaining the size of the file, but obviously still will maintain the pointers and strings structure. If the last string is edited and contains extra null values, those will be deleted.
 
 -   **Monster Hunter Quest files (.mib/.bin) support**<br />
     *Added in v1.2.0*
@@ -312,6 +318,22 @@ Run the AppRun with the QT plugin path explicitly set:
 sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
 ```
 If you have NodeGui installed in another path use that path instead.
+
+## Ideas for future versions (Only ideas, I REALLY don't compromise with anything)
+- Search for external pointers in standard mode: After establishing the start and end offsets both for pointers and strings, a pop-up will appear asking if there are other offsets where at least 1 of the pointers in the selected interval can be located. You can put them manually or do a "search" in the file or in other files. After completing the process, if another place with the same pointer was located, it will be taken into account while editing strings to maintain it exactly like its counterpart in the interval. This will ensure that even the pointers that are not inside the interval got updated when a string is edited.
+- An option to choose if maintaining the 4-byte alignment is needed (currently, the alignment is not maintained; a string can start in 01 or 02 instead of 00, 04, 08 or 0C)
+- Auto endianess detection.
+- Support for custom encoding tables (.tbl).
+- 'Padding byte' definition (currently is null/00 by default, but could be FF, 20, etc.).
+- Make the tool usable for 8-byte pointers.
+- Fix the duplication string bug in csv/Batch translation. This rarely happens but if IIRC how occurss, happens when the string 'A' content is changed and match with string 'B', then the string B is translated but the A too since they both has the same content. The system detect it and triggers a warn message to let the user now know those strings will need manual correction.
+
+## Support the Project ☕
+This tool is completely free and open-source. I built it to solve real headaches in the translation process focusing in being as general as posible in their core. If it saved you hours of manual hex editing, consider buying me a coffee!
+
+Your support helps me keep the tool updated and motivates me keep developing new features.
+
+[Support me on Ko-fi](https://ko-fi.com/amaillo)
 
 ## Special Thanks
 
