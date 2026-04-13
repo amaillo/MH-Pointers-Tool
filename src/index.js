@@ -58,7 +58,7 @@ let lastPointerOffsetInDecimal = ""
 let extractedStringsOLD = ""
 let spaceLeftInSection = 0
 let offsetOfEachString = []
-let offsetOfEachPointer = []
+let offsetOfEachPointerInDecimals = []
 let pointersHexValues = []
 let addressOfEachStringInMemory= []
 let extractedPointersIn4= []
@@ -695,7 +695,7 @@ function pointerOffsetFunc(){
 
   while(i < lastPointerOffsetInDecimal){
 
-    offsetOfEachPointer[k]= i
+    offsetOfEachPointerInDecimals[k]= i
     k=k+1
     i=i+4;
   }
@@ -1289,7 +1289,7 @@ function setDefaultValues(options){
     lastPointerOffsetLineEdit.setText("")
     firstStringOffsetLineEdit.setText("")
     lastStringOffsetLineEdit.setText("")
-    offsetOfEachPointer = []
+    offsetOfEachPointerInDecimals = []
   }else{
     sectionNameLineEdit.setText("")
     firstPointerOffsetLineEdit.setText("")
@@ -1298,7 +1298,7 @@ function setDefaultValues(options){
     lastStringOffsetLineEdit.setText("")
     currentContent = ""
     selectedFile = ""
-    offsetOfEachPointer = []
+    offsetOfEachPointerInDecimals = []
     bigEndian.setCheckState(0)
   }
 
@@ -2316,7 +2316,7 @@ function exportStringsOffsetAndPointersFromAllSections(options, addFileName) {
           if(firstPointerOffsetLineEdit.text()) {
 
             line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`
-            line += `${offsetOfEachPointer[i]};`
+            line += `${offsetOfEachPointerInDecimals[i].toString(16).toUpperCase()};`
             line += `${pointersHexValues[i].toString("hex").toUpperCase()}`
             
             if(rawStrings[i+1] === undefined) {
@@ -2395,7 +2395,7 @@ function handlePointersTableExport(exportOptionNumber, addFileName) {
           if(j===0){
             line += `${offsetOfEachString[i].toString("hex")};`;
             line += `${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")};`;
-            line += `${offsetOfEachPointer[i]};`;
+            line += `${offsetOfEachPointerInDecimals[i].toString(16).toUpperCase()};`;
             line += `${pointersHexValues[i].toString("hex").toUpperCase()}`;
 
             if (rawStrings[i + 1] === undefined) {
@@ -2496,7 +2496,7 @@ async function handleMultiPTExport(addFileName, includePointers) {
           if (j === 0 && includePointers) {
             line += `;${offsetOfEachString[i].toString("hex")}`;
             line += `;${addressOfEachStringInMemory[i].toString("hex").toUpperCase().replaceAll("00","")}`;
-            line += `;${offsetOfEachPointer[i]}`;
+            line += `;${offsetOfEachPointerInDecimals[i].toString(16).toUpperCase()}`;
             line += `;${pointersHexValues[i].toString("hex").toUpperCase()}`;
 
             if (i === rawStrings.length - 1) {
@@ -2829,7 +2829,7 @@ function currentStringSelectedData(){
   for(i = 0;currentContent[currentStringPositionInFile+i]!==0;++i){}
 
   const outputText = Buffer.from(currentContent.subarray(currentStringPositionInFile,currentStringPositionInFile+i))
-  const pointerPositionInFile = offsetOfEachPointer[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]]
+  const pointerPositionInFile = offsetOfEachPointerInDecimals[itemPositionOfSharedPointers[pointersViewerSpecific.currentRow()]]
   
 
   return {text:outputText,stringPosition:currentStringPositionInFile,pointerPosition:pointerPositionInFile}
@@ -5202,7 +5202,7 @@ const mainMenuAction8 = new QAction();
 
 mainMenu.setTitle("Menu")
 mainMenuAction1.setText('Load file');
-mainMenuAction2.setText('Load Pointers Table (MH2/P3)');
+mainMenuAction2.setText('Load Pointers Table (For MH2/P3)');
 mainMenuAction3.setText('Create a Pointers Table for this file');
 mainMenuAction4.setText('Open all .mib files in folder');
 mainMenuAction5.setText('Align two .csv by rows');
@@ -5374,7 +5374,7 @@ aboutTextLayout.addWidget(aboutTextLabel)
 aboutTextWidget.setLayout(aboutTextLayout)
 
 const aboutDonateLabel = new QLabel()
-aboutDonateLabel.setText('<a href="https://ko-fi.com/amaillo">Ko-fi</a>' + '  | <a href="0xe681952e9083726aae7b545e6b4608acdc444226">USDT (BSC)</a> | <a href="TJL2fpkt98ervNimA5dMarWeuLbG2rt1az">USDT (TRX)</a>')
+aboutDonateLabel.setText('<a href="https://ko-fi.com/amaillo">Ko-fi</a>' + '  | <a href="0xe681952e9083726aae7b545e6b4608acdc444226">USDT (BSC)</a> | <a href="TJL2fpkt98ervNimA5dMarWeuLbG2rt1az">USDT (TRX)</a>' + ' |<- Right Click')
 aboutDonateLabel.setAlignment(132)
 aboutDonateLabel.setOpenExternalLinks(true)
 const aboutDonateLayout = new QBoxLayout(0)
@@ -6110,7 +6110,7 @@ pointersViewerFull.addEventListener("itemSelectionChanged",function (){
     
     if(extractedPointersIn4[i].toString("hex").toUpperCase() === pointersViewerFull.currentItem().text().toUpperCase() && phase===0){
       
-      pointerOffsetLabel.setText(`Pointer Offset: ${offsetOfEachPointer[i].toString(16).toUpperCase()}`)
+      pointerOffsetLabel.setText(`Pointer Offset: ${offsetOfEachPointerInDecimals[i].toString(16).toUpperCase()}`)
 
       if(oldSelectedString != -1){
 
