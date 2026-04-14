@@ -5343,7 +5343,7 @@ aboutDialogLayout.addWidget(aboutMadeByWidget)
 
 const aboutTitleLabel = new QLabel()
 aboutTitleLabel.setTextInteractionFlags(1)
-aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.2")
+aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.2.1")
 const aboutTitleLayout = new QBoxLayout(0)
 aboutTitleLayout.addWidget(aboutTitleLabel)
 aboutTitleWidget.setLayout(aboutTitleLayout)

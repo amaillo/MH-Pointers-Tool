@@ -232,14 +232,11 @@ You can find these offsets using any standard hex editor (like [MadEdit](https:/
 
 ## Installation (Windows and Linux)
 
-Download the latest package and execute it.
+Download the latest package, extract the file and execute it.
 
 For **Windows**, you will also need [Visual C++ Runtime 2015-2022](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-For **Linux**, you will also need NodeGui. Then execute AppRun via the terminal using a command similar to this:
-```
-sudo QT_PLUGIN_PATH= PATH_TO_NODEGUI/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
-```
+For **Linux**, you can use the AppImage or execute the AppRun file via the terminal using './AppRun'.
 
 ## Building from source
 
@@ -308,15 +305,18 @@ npx nodegui-packer --pack dist
 **Linux mint**
 1. Navigate to `MH-Pointers-Tool/deploy/linux/build/MH-Pointers-Tool`
 2. Open `qt.conf`
-3. Change `Plugins: = plugins` to <br />`Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins`
+3. Change `Plugins: = plugins` to <br />`Plugins = /usr/lib/node_modules/@nodegui/nodegui/miniqt/6.6.0/gcc_64/plugins`
 
 (Use your actual NodeGui path if different)
 
 **Ubuntu**
 Run the AppRun with the QT plugin path explicitly set:
 ```
-sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.4.1/gcc_64/plugins ./AppRun
+sudo QT_PLUGIN_PATH=~/MH-Pointers-Tool/node_modules/@nodegui/nodegui/miniqt/6.6.0/gcc_64/plugins ./AppRun
 ```
+
+   > **Note:** The miniqt version can be different for you.
+
 If you have NodeGui installed in another path, use that path instead.
 
 ## Ideas for future versions (Only ideas, I REALLY don't compromise with anything)
@@ -337,7 +337,7 @@ Your support helps me keep the tool updated and motivates me to keep developing 
 
 ## Special Thanks
 
-To all the members of the [MH OldSchool Discord](https://discord.gg/YzmeXb8) for their support and knowledge. Join now to play all the Monster Hunters from PS2 online!
+To all the members of the [MH OldSchool Discord](https://discord.gg/YzmeXb8) for their support and knowledge. Join now to play Monster Hunter, Monster Hunter G and Monster Hunter Dos from the PS2 online!
 
 ## License
 
