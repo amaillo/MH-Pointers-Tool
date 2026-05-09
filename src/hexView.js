@@ -22,15 +22,6 @@ const {
     TextFormat 
 } = require ("@nodegui/nodegui")
 
-const {
-    setShiftJISEncoding,
-    setUTF8Encoding,
-    start,
-    setSelectedMainProgramFile,
-    updateNeccesaryHexValues,
-    relocateStringPosition
-} = require ("./index.js");
-
 const fs = require('fs');
 const Os = require('os');
 const path = require('path');
@@ -134,10 +125,10 @@ function loadFileAndRender(filePath) {
     }
 }
 
-function setUTF8EncodingAndRender() {
+function setUTF8EncodingAndRender(setUTF8EncodingCallback) {
     if (currentBuffer) {
         currentEncoding = 'UTF8';
-        setUTF8Encoding(true);
+        setUTF8EncodingCallback(true);
         shiftJISButtonInstance.setEnabled(true);
         utf8ButtonInstance.setEnabled(false);
         renderHexView();
@@ -145,10 +136,10 @@ function setUTF8EncodingAndRender() {
     }
 }
 
-function setShiftJISEncodingAndRender() {
+function setShiftJISEncodingAndRender(setShiftJISEncodingCallback) {
     if (currentBuffer) {
         currentEncoding = 'SJIS';
-        setShiftJISEncoding(true);
+        setShiftJISEncodingCallback(true);
         utf8ButtonInstance.setEnabled(true);
         shiftJISButtonInstance.setEnabled(false);
         renderHexView();
@@ -156,7 +147,7 @@ function setShiftJISEncodingAndRender() {
     }
 }
 
-function hexView(selectedFile, initialEncoding, listWitgetObj) {
+function hexView(selectedFile, initialEncoding, listWitgetObj,updateNeccesaryHexValueCallback) {
     if (hexWindowInstance) {
         loadFileAndRender(selectedFile);
         hexWindowInstance.activateWindow();
@@ -497,7 +488,7 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
             const filePath = Os.platform() === "linux"
                 ? fileUrls.at(0).toString().replace("file://", "")
                 : fileUrls.at(0).toString().replace("file:///", "");
-            
+            const {setSelectedMainProgramFile,start} = require("./index.js");
             setSelectedMainProgramFile(filePath);
             start();
             loadFileAndRender(filePath);
@@ -517,13 +508,14 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
                     break;
                 }
             }
-            updateNeccesaryHexValues({firstString: toHexadecimal(startIndex), postLastString: toHexadecimal(postLastString)});
+            updateNeccesaryHexValueCallback({firstString: toHexadecimal(startIndex), postLastString: toHexadecimal(postLastString)});
         } else {
             console.log("Not active selection.");
         }
     });
 
     selectAsStringPositionButton.addEventListener('clicked', () => {
+        const {relocateStringPosition} = require("./index.js");
         relocateStringPosition(selectionStartByteIndex,listWitgetObj.text)
     })
     
@@ -539,14 +531,22 @@ function hexView(selectedFile, initialEncoding, listWitgetObj) {
             }
             const postLastPointer = nextAlignedOffset < currentBuffer.length ? nextAlignedOffset : -1;
             
-            updateNeccesaryHexValues({firstPointer: toHexadecimal(startIndex), postLastPointer: toHexadecimal(postLastPointer)});
+            updateNeccesaryHexValueCallback({firstPointer: toHexadecimal(startIndex), postLastPointer: toHexadecimal(postLastPointer)});
         } else {
             console.log("Not active selection.");
         }
     });
 
-    utf8ButtonInstance.addEventListener('clicked', setUTF8EncodingAndRender);
-    shiftJISButtonInstance.addEventListener('clicked', setShiftJISEncodingAndRender);
+    utf8ButtonInstance.addEventListener('clicked', ()=>{
+
+        const { setUTF8Encoding } = require("./index.js");
+        setUTF8EncodingAndRender(setUTF8Encoding)
+    });
+    shiftJISButtonInstance.addEventListener('clicked', ()=>{
+
+        const { setShiftJISEncoding } = require("./index.js");
+        setShiftJISEncodingAndRender(setShiftJISEncoding)
+    });
     
     // Search logic modified to save and navigate results
     const searchHex = () => {

@@ -33,7 +33,8 @@ const {
   hexViewBuffer,
   setUTF8EncodingAndRender,
   setShiftJISEncodingAndRender,
-  shutdownHexView,toHexadecimal
+  shutdownHexView,
+  toHexadecimal
 } = require("./hexView.js")
 
 const Os = require ('os')
@@ -191,7 +192,7 @@ function loadFile() {
       return
     }
     const encoding = UTF8Encoding?"UTF8":"SJIS"
-    hexView(selectedFile,encoding)
+    hexView(selectedFile,encoding,undefined,updateNeccesaryHexValues)
   })
 
   chooseFileDialog.exec();
@@ -2971,7 +2972,7 @@ function relocateToNewString(){
       row:row
     }
 
-    hexView(selectedFile,encoding,listWitgetObj)
+    hexView(selectedFile,encoding,listWitgetObj,updateNeccesaryHexValues)
 
     return
   }
@@ -4353,7 +4354,7 @@ function setShiftJISEncoding(force){
     shiftJISEncoding = true
 
     if(hexViewBuffer&&currentEncoding==="UTF8"){
-      setShiftJISEncodingAndRender()
+      setShiftJISEncodingAndRender(setShiftJISEncoding)
     }
   }
 
@@ -4376,7 +4377,7 @@ function setUTF8Encoding(force){
     UTF8Encoding = true
     shiftJISEncoding = false
     if(hexViewBuffer&&currentEncoding==="SJIS"){
-      setUTF8EncodingAndRender()
+      setUTF8EncodingAndRender(setUTF8Encoding)
     }
   }
   if(listWidget.count()!=0 && extractedPointersIn4[0]!= undefined){
@@ -5343,7 +5344,7 @@ aboutDialogLayout.addWidget(aboutMadeByWidget)
 
 const aboutTitleLabel = new QLabel()
 aboutTitleLabel.setTextInteractionFlags(1)
-aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.2.1")
+aboutTitleLabel.setText("MH Pointers Tool" +" - Ver. 1.2.2")
 const aboutTitleLayout = new QBoxLayout(0)
 aboutTitleLayout.addWidget(aboutTitleLabel)
 aboutTitleWidget.setLayout(aboutTitleLayout)
@@ -6452,6 +6453,10 @@ win.addEventListener(WidgetEventTypes.Drop, (e) => {
         selectedFile = url.toString().replace("file:///","");
         start()
       }
+
+      if(hexViewBuffer){
+        shutdownHexView()
+      }
     }
   }
 });
@@ -6503,7 +6508,6 @@ module.exports = {
   relocateStringPosition,
   selectedMainProgramFile:selectedFile,
   setSelectedMainProgramFile,
-  updateNeccesaryHexValues
 }
 
 global.win = win;
